@@ -2,7 +2,6 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import * as crypto from 'crypto';
-import ws from 'ws';
 
 @Injectable()
 export class SupabaseService implements OnModuleInit {
@@ -41,9 +40,6 @@ export class SupabaseService implements OnModuleInit {
         persistSession: false,
         autoRefreshToken: false,
       },
-      realtime: {
-        transport: ws,
-      },
     });
 
     this.logger.log('Supabase Administrative Client initialized.');
@@ -63,9 +59,6 @@ export class SupabaseService implements OnModuleInit {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
-      },
-      realtime: {
-        transport: ws,
       },
     });
   }
