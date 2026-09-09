@@ -1,9 +1,9 @@
 {
     email admin@cybercrew.online
+    auto_https off
 }
 
-# HTTP to HTTPS redirect & security headers
-ctf.cybercrew.online {
+:80 {
     # Encode with gzip and zstd
     encode zstd gzip
 
