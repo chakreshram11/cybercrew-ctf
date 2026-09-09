@@ -28,6 +28,6 @@ Operative Browser                  Supabase Auth                   NestJS API
 ---
 
 ## 3. Password Reset Workflow
-- Initiated via `supabase.auth.resetPasswordForEmail()` on `/forgot-password`.
-- Supabase sends a cryptographic one-time reset link redirecting to `https://ctf.cybercrew.online/reset-password`.
-- The operative enters a new password, validated client-side and committed via `supabase.auth.updateUser()`.
+- Self-service participant password reset emails via `supabase.auth.resetPasswordForEmail()` are disabled for heightened CTF event security.
+- When an operative clicks "Forgot Password" on `/login` or visits `/forgot-password`, a professional "Contact Admin" password-reset UI is presented.
+- The UI provides administrative contact details (`VITE_ADMIN_CONTACT_EMAIL`) so participants can request password recovery directly from event administrators.

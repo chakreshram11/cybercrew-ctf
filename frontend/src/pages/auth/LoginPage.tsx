@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { Shield, LogIn, AlertCircle, Terminal } from 'lucide-react';
+import { ContactAdminModal } from '../../components/auth/ContactAdminModal';
 
 export const LoginPage: React.FC = () => {
   const { signIn } = useAuth();
@@ -10,6 +11,7 @@ export const LoginPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,12 +70,13 @@ export const LoginPage: React.FC = () => {
               <label className="block text-xs font-mono text-slate-300 uppercase tracking-wider">
                 Password
               </label>
-              <Link
-                to="/forgot-password"
-                className="text-xs font-mono text-cyan-400 hover:text-cyan-300"
+              <button
+                type="button"
+                onClick={() => setIsResetModalOpen(true)}
+                className="text-xs font-mono text-cyan-400 hover:text-cyan-300 transition-colors"
               >
                 Forgot Password?
-              </Link>
+              </button>
             </div>
             <input
               type="password"
@@ -113,6 +116,11 @@ export const LoginPage: React.FC = () => {
           </p>
         </div>
       </div>
+
+      <ContactAdminModal
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+      />
     </div>
   );
 };
