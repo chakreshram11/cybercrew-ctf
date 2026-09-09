@@ -28,10 +28,20 @@ for cmd in git docker; do
   fi
 done
 
-if ! docker compose version &>/dev/null; then
-  log_error "'docker compose' plugin is required but not available."
+# Detect Docker Compose CLI (v2 plugin vs v1 standalone binary)
+if docker compose version &>/dev/null; then
+  COMPOSE_CMD="docker compose"
+elif command -v docker-compose &>/dev/null; then
+  COMPOSE_CMD="docker-compose"
+else
+  log_error "Neither 'docker compose' nor 'docker-compose' could be located."
+  log_warn "On Ubuntu/Debian, install the Docker Compose plugin by running:"
+  log_warn "  sudo apt update && sudo apt install -y docker-compose-plugin"
+  log_warn "Or install the standalone binary:"
+  log_warn "  sudo apt update && sudo apt install -y docker-compose"
   exit 1
 fi
+log_info "Using Docker Compose command: [$COMPOSE_CMD]"
 
 # 2. Verify production .env exists
 if [ ! -f ".env" ]; then
@@ -61,11 +71,11 @@ log_info "New target commit SHA: [${NEW_COMMIT:0:8}]"
 
 # 5. Build Docker images
 log_info "Building production Docker images..."
-docker compose -f deploy/docker-compose.yml build
+$COMPOSE_CMD -f deploy/docker-compose.yml build
 
 # 6. Deploy containers
 log_info "Starting container services..."
-docker compose -f deploy/docker-compose.yml up -d --remove-orphans
+$COMPOSE_CMD -f deploy/docker-compose.yml up -d --remove-orphans
 
 # 7. Post-deployment stabilization pause
 log_info "Waiting 10 seconds for services to start..."
