@@ -13,6 +13,7 @@ import { CreateHintDto } from './dto/create-hint.dto';
 import { UpdateHintDto } from './dto/update-hint.dto';
 import { CurrentUser, AuthUser } from '../../common/decorators/current-user.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
+import { Public } from '../../common/decorators/public.decorator';
 
 @ApiTags('Hints')
 @ApiBearerAuth()
@@ -20,9 +21,29 @@ import { Roles } from '../../common/decorators/roles.decorator';
 export class HintsController {
   constructor(private hintsService: HintsService) {}
 
+  @Get('challenges/:challengeId/hints')
+  @Public()
+  @ApiOperation({ summary: 'List public hints for a challenge with masked content if unrevealed' })
+  async listPublicHints(
+    @Param('challengeId') challengeId: string,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    return this.hintsService.listPublicHints(challengeId, user);
+  }
+
   @Post('challenges/:challengeId/hints/:hintId/unlock')
   @ApiOperation({ summary: 'Unlock challenge hint atomically with score ledger deduction' })
   async unlockHint(
+    @Param('challengeId') challengeId: string,
+    @Param('hintId') hintId: string,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.hintsService.unlockHint(challengeId, hintId, user);
+  }
+
+  @Post('challenges/:challengeId/hints/:hintId/reveal')
+  @ApiOperation({ summary: 'Reveal challenge hint atomically with score ledger deduction (alias)' })
+  async revealHint(
     @Param('challengeId') challengeId: string,
     @Param('hintId') hintId: string,
     @CurrentUser() user: AuthUser,

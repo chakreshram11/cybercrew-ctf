@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Challenge, ChallengeHint } from '../../types';
 import { DifficultyBadge, CategoryBadge } from '../common/Badges';
 import {
@@ -7,14 +7,14 @@ import {
   Flag,
   Download,
   Terminal,
-  HelpCircle,
   AlertCircle,
   CheckCircle2,
   Lock,
   Unlock,
   ExternalLink,
   Flame,
-  Users
+  Users,
+  Lightbulb,
 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -42,9 +42,24 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
     message?: string;
   }>({ status: 'idle' });
 
-  const [hints, setHints] = useState<ChallengeHint[]>(challenge.hints || []);
   const [unlockingHintId, setUnlockingHintId] = useState<string | null>(null);
   const [hintError, setHintError] = useState<string | null>(null);
+
+  // Fetch participant-facing hints for this challenge
+  const {
+    data: fetchedHints,
+    isLoading: isHintsLoading,
+    refetch: refetchHints,
+  } = useQuery({
+    queryKey: ['challenge-hints', challenge.id],
+    queryFn: async () => {
+      const res = await api.get<ChallengeHint[]>(`/challenges/${challenge.id}/hints`);
+      return res.success && res.data ? res.data : [];
+    },
+    enabled: isOpen && !!challenge.id,
+  });
+
+  const hints = fetchedHints || challenge.hints || [];
 
   if (!isOpen) return null;
 
@@ -130,24 +145,26 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
         hint_id: string;
         content: string;
         cost: number;
-      }>(`/challenges/${challenge.id}/hints/${hintId}/unlock`);
+        already_unlocked?: boolean;
+      }>(`/challenges/${challenge.id}/hints/${hintId}/reveal`);
 
       if (res.success && res.data) {
-        setHints((prev) =>
-          prev.map((h) =>
-            h.id === hintId
-              ? { ...h, is_unlocked: true, content: res.data!.content }
-              : h
-          )
-        );
+        refetchHints();
         queryClient.invalidateQueries({ queryKey: ['team-progress'] });
         queryClient.invalidateQueries({ queryKey: ['scoreboard'] });
+        queryClient.invalidateQueries({ queryKey: ['challenges'] });
+        queryClient.invalidateQueries({ queryKey: ['team-score-history'] });
         await refreshProfile();
       } else {
-        setHintError(res.error?.message || 'Failed to unlock hint. Insufficient points or restriction.');
+        const msg = res.error?.message || 'Failed to reveal hint.';
+        if (msg.toLowerCase().includes('insufficient') || msg.toLowerCase().includes('points')) {
+          setHintError('Not enough points to reveal this hint.');
+        } else {
+          setHintError(msg);
+        }
       }
     } catch {
-      setHintError('Network error while unlocking hint.');
+      setHintError('Network error while revealing hint.');
     } finally {
       setUnlockingHintId(null);
     }
@@ -267,64 +284,97 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
             </div>
           )}
 
-          {/* Hints Section */}
-          {hints && hints.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <HelpCircle className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Intelligence & Hints ({hints.length})</span>
+          {/* Paid Hints Section */}
+          <div className="space-y-3 pt-2 border-t border-slate-800/80">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold flex items-center gap-1.5">
+                  <Lightbulb className="w-4 h-4 text-amber-400" />
+                  <span>HINTS</span>
                 </h4>
-                {hintError && (
-                  <span className="text-xs text-rose-400 font-mono">{hintError}</span>
-                )}
+                <p className="text-[11px] font-mono text-slate-400 mt-0.5">
+                  Need a little help? Reveal a hint by spending points.
+                </p>
               </div>
+              {hintError && (
+                <span className="text-xs text-rose-400 font-mono bg-rose-500/10 px-2 py-1 rounded border border-rose-500/20">
+                  {hintError}
+                </span>
+              )}
+            </div>
 
-              <div className="space-y-2">
+            {isHintsLoading ? (
+              <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800/80 text-center font-mono text-xs text-slate-500">
+                LOADING HINT CATALOG...
+              </div>
+            ) : hints.length === 0 ? (
+              <div className="p-4 rounded-xl bg-slate-900/40 border border-slate-800/80 text-center font-mono text-xs text-slate-500">
+                No hints are available for this challenge.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
                 {hints.map((hint, index) => (
                   <div
                     key={hint.id}
-                    className="p-3.5 rounded-lg bg-slate-900/60 border border-slate-800 font-mono text-xs"
+                    className={`p-4 rounded-xl border transition-all font-mono text-xs ${
+                      hint.is_unlocked
+                        ? 'bg-emerald-950/10 border-emerald-500/30'
+                        : 'bg-slate-900/60 border-slate-800'
+                    }`}
                   >
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">
                         {hint.is_unlocked ? (
-                          <Unlock className="w-4 h-4 text-emerald-400" />
+                          <Unlock className="w-4 h-4 text-emerald-400 flex-shrink-0" />
                         ) : (
-                          <Lock className="w-4 h-4 text-amber-400" />
+                          <Lock className="w-4 h-4 text-amber-400 flex-shrink-0" />
                         )}
-                        <span className="font-bold text-slate-200">
-                          {hint.title || `Hint #${index + 1}`}
-                        </span>
+                        <div>
+                          <span className="font-bold text-slate-200 block text-xs">
+                            {hint.title || `Hint #${index + 1}`}
+                          </span>
+                          <span className="text-[10px] text-amber-400/90">
+                            {hint.cost > 0 ? `${hint.cost} PTS` : 'FREE'}
+                          </span>
+                        </div>
                       </div>
 
-                      {hint.is_unlocked ? (
-                        <span className="text-emerald-400 text-[11px] font-semibold">
-                          ✓ UNLOCKED
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleUnlockHint(hint.id)}
-                          disabled={unlockingHintId === hint.id}
-                          className="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[11px] font-bold transition-colors disabled:opacity-50"
-                        >
-                          {unlockingHintId === hint.id
-                            ? 'UNLOCKING...'
-                            : `UNLOCK (-${hint.cost} PTS)`}
-                        </button>
-                      )}
+                      <div>
+                        {hint.is_unlocked ? (
+                          <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-bold">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>REVEALED</span>
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleUnlockHint(hint.id)}
+                            disabled={unlockingHintId === hint.id}
+                            className="px-3.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[11px] font-bold transition-all disabled:opacity-50 hover:scale-[1.02] shadow-sm shadow-amber-500/10 flex items-center gap-1.5"
+                          >
+                            {unlockingHintId === hint.id ? (
+                              <>
+                                <Terminal className="w-3.5 h-3.5 animate-spin" />
+                                <span>REVEALING...</span>
+                              </>
+                            ) : (
+                              <span>REVEAL HINT (-{hint.cost} PTS)</span>
+                            )}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {hint.is_unlocked && hint.content && (
-                      <p className="mt-2 pt-2 border-t border-slate-800/80 text-slate-300 font-sans text-sm">
+                      <div className="mt-3 pt-3 border-t border-slate-800/80 text-slate-300 font-sans text-sm leading-relaxed whitespace-pre-line bg-slate-950/60 p-3 rounded-lg border border-emerald-500/20">
                         {hint.content}
-                      </p>
+                      </div>
                     )}
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Submission Result Box */}
           {submissionResult.status !== 'idle' && (

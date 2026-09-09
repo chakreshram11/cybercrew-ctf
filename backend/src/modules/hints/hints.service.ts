@@ -18,6 +18,70 @@ export class HintsService {
   constructor(private supabaseService: SupabaseService) {}
 
   /**
+   * Retrieves participant-facing hints for a challenge scenario.
+   * Content is strictly masked unless unlocked by operative team.
+   */
+  async listPublicHints(challengeId: string, currentUser?: AuthUser) {
+    const client = this.supabaseService.getClient();
+
+    const { data: hints, error } = await client
+      .from('challenge_hints')
+      .select('id, challenge_id, title, cost, display_order, is_active')
+      .eq('challenge_id', challengeId)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true });
+
+    if (error) {
+      throw new InternalServerErrorException('Failed to retrieve challenge hints.');
+    }
+
+    if (!hints || hints.length === 0) {
+      return [];
+    }
+
+    let unlockedHintIds = new Set<string>();
+
+    if (currentUser?.team_id) {
+      const { data: unlocks } = await client
+        .from('hint_unlocks')
+        .select('hint_id')
+        .eq('team_id', currentUser.team_id)
+        .eq('challenge_id', challengeId);
+
+      if (unlocks) {
+        unlockedHintIds = new Set(unlocks.map((u) => u.hint_id));
+      }
+    }
+
+    return Promise.all(
+      hints.map(async (h) => {
+        const isUnlocked = unlockedHintIds.has(h.id);
+        let content = undefined;
+
+        if (isUnlocked) {
+          const { data: hintDetail } = await client
+            .from('challenge_hints')
+            .select('content')
+            .eq('id', h.id)
+            .single();
+          content = hintDetail?.content;
+        }
+
+        return {
+          id: h.id,
+          challenge_id: h.challenge_id,
+          title: h.title,
+          cost: h.cost,
+          display_order: h.display_order,
+          is_active: h.is_active,
+          is_unlocked: isUnlocked,
+          content,
+        };
+      }),
+    );
+  }
+
+  /**
    * Unlocks intelligence hint atomically with score deduction (Sections 28, 30, 31, 32).
    * Verifies squad score, prevents double-charging, checks allow_negative_scores,
    * and records HINT_PURCHASE in the immutable score ledger.
