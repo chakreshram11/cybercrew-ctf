@@ -38,9 +38,9 @@ for container in "${CONTAINERS[@]}"; do
   fi
 done
 
-# 2. Check Backend Health API Endpoint (/api/v1/health)
+# 2. Check Backend Health API Endpoint (/health)
 log_info "Testing Backend API Health Endpoint..."
-BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://localhost:4000/api/v1/health}"
+BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://localhost:4000/health}"
 
 # Retry up to 5 times to give backend time to connect to DB and start API server
 MAX_RETRIES=5

@@ -28,6 +28,8 @@ services:
       dockerfile: Dockerfile
     container_name: cybercrew-ctf-backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       - NODE_ENV=production
       - PORT=4000
@@ -63,6 +65,8 @@ services:
         - VITE_APP_DOMAIN=https://ctf.cybercrew.online
     container_name: cybercrew-ctf-frontend
     restart: unless-stopped
+    env_file:
+      - .env
     expose:
       - "80"
     networks:
