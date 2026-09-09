@@ -1,0 +1,36 @@
+{
+  "name": "cybercrew-ctf-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cyber Crew CTF - Professional Capture The Flag Competition Platform",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run start:dev --workspace=backend",
+    "build": "npm run build --workspaces --if-present",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "test": "npm run test --workspaces --if-present",
+    "test:frontend": "npm run test --workspace=frontend",
+    "test:backend": "npm run test --workspace=backend",
+    "test:e2e": "npm run test:e2e --workspace=backend",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:seed": "npm run db:seed --workspace=backend"
+  },
+  "keywords": [
+    "ctf",
+    "cybersecurity",
+    "cybercrew",
+    "competition",
+    "infosec",
+    "hacking"
+  ],
+  "author": "Cyber Crew Club",
+  "license": "UNLICENSED"
+}

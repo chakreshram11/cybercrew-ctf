@@ -1,0 +1,94 @@
+version: '3.8'
+
+services:
+  # ============================================================================
+  # Reverse Proxy (Caddy with automatic TLS for https://ctf.cybercrew.online)
+  # ============================================================================
+  reverse-proxy:
+    image: caddy:2-alpine
+    container_name: cybercrew-ctf-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - ctf-network
+
+  # ============================================================================
+  # NestJS Backend API Service
+  # ============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: cybercrew-ctf-backend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - PORT=4000
+      - FRONTEND_URL=https://ctf.cybercrew.online
+      - CORS_ORIGIN=https://ctf.cybercrew.online
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET}
+      - DATABASE_URL=${DATABASE_URL}
+      - DIRECT_URL=${DIRECT_URL}
+      - FLAG_SECRET_SALT=${FLAG_SECRET_SALT}
+      - REDIS_URL=redis://redis:6379
+    expose:
+      - "4000"
+    depends_on:
+      - redis
+    networks:
+      - ctf-network
+
+  # ============================================================================
+  # React + Vite Frontend (Static bundle served via Nginx/Caddy)
+  # ============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=/api/v1
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+        - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+        - VITE_APP_NAME=Cyber Crew CTF
+        - VITE_APP_DOMAIN=https://ctf.cybercrew.online
+    container_name: cybercrew-ctf-frontend
+    restart: unless-stopped
+    expose:
+      - "80"
+    networks:
+      - ctf-network
+
+  # ============================================================================
+  # Redis (Optional cache, rate-limiting & session store)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: cybercrew-ctf-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secure_dev_pass}
+    volumes:
+      - redis_data:/data
+    networks:
+      - ctf-network
+
+networks:
+  ctf-network:
+    name: cybercrew-ctf-net
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  redis_data:

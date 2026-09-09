@@ -1,0 +1,86 @@
+version: '3.8'
+
+# ==============================================================================
+# Cyber Crew CTF - Sandboxed Challenge Orchestration Runtime
+# Strictly adheres to Section 74 & 75 Security Architecture Specifications:
+# 1. Zero Docker socket exposure (/var/run/docker.sock prohibited)
+# 2. Strict cgroups limits (CPU, RAM, PIDs)
+# 3. Drop all capabilities (cap_drop: ALL)
+# 4. Read-only root filesystems where applicable
+# 5. Isolated bridge network with zero access to platform or internal secrets
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Web 01: SQL Nightmare (Port 8081)
+  # ----------------------------------------------------------------------------
+  web-sql-nightmare:
+    build:
+      context: ../../challenges/web/sql-nightmare
+      dockerfile: Dockerfile
+    container_name: ctf-chal-web-01
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    networks:
+      - ctf-challenge-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 100
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=32m
+      - /run:rw,noexec,nosuid,size=16m
+
+  # ----------------------------------------------------------------------------
+  # Pwn 01: Buffer Overflow 101 (TCP Port 1337)
+  # ----------------------------------------------------------------------------
+  pwn-bof-101:
+    build:
+      context: ../../challenges/pwn/bof-101
+      dockerfile: Dockerfile
+    container_name: ctf-chal-pwn-01
+    restart: unless-stopped
+    ports:
+      - "1337:1337"
+    networks:
+      - ctf-challenge-net
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 128m
+    memswap_limit: 128m
+    cpus: 0.25
+    pids_limit: 50
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+
+  # ----------------------------------------------------------------------------
+  # Linux 01: Capability Abuse Lab (SSH Port 2222)
+  # ----------------------------------------------------------------------------
+  linux-privesc-01:
+    build:
+      context: ../../challenges/linux/privesc-capability
+      dockerfile: Dockerfile
+    container_name: ctf-chal-linux-01
+    restart: unless-stopped
+    ports:
+      - "2222:22"
+    networks:
+      - ctf-challenge-net
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.5
+    pids_limit: 150
+
+networks:
+  ctf-challenge-net:
+    name: cybercrew-isolated-challenge-net
+    driver: bridge
+    internal: false

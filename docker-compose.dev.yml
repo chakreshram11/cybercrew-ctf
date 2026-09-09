@@ -1,0 +1,22 @@
+version: '3.8'
+
+# ==============================================================================
+# Cyber Crew CTF - Local Development Docker Compose
+# Runs Redis and local utilities. Frontend & backend can also run with local npm.
+# ==============================================================================
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: cybercrew-redis-dev
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly no
+    networks:
+      - ctf-dev-network
+
+networks:
+  ctf-dev-network:
+    name: cybercrew-ctf-dev-net
+    driver: bridge
