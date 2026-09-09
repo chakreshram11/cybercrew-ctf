@@ -76,11 +76,11 @@ log_info "New target commit SHA: [${NEW_COMMIT:0:8}]"
 
 # 5. Build Docker images
 log_info "Building production Docker images..."
-$COMPOSE_CMD -f deploy/docker-compose.yml build
+$COMPOSE_CMD --env-file .env -f deploy/docker-compose.yml build
 
 # 6. Deploy containers
 log_info "Starting container services..."
-$COMPOSE_CMD -f deploy/docker-compose.yml up -d --remove-orphans
+$COMPOSE_CMD --env-file .env -f deploy/docker-compose.yml up -d --remove-orphans
 
 # 7. Post-deployment stabilization pause
 log_info "Waiting 10 seconds for services to start..."

@@ -53,8 +53,8 @@ fi
 
 # 3. Rebuild and restart Docker containers
 log_info "Rebuilding and restarting Docker containers..."
-$COMPOSE_CMD -f deploy/docker-compose.yml build
-$COMPOSE_CMD -f deploy/docker-compose.yml up -d --remove-orphans
+$COMPOSE_CMD --env-file .env -f deploy/docker-compose.yml build
+$COMPOSE_CMD --env-file .env -f deploy/docker-compose.yml up -d --remove-orphans
 
 # 4. Wait briefly for services to stabilize
 log_info "Waiting 10 seconds for containers to stabilize..."
