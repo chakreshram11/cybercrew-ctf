@@ -1,5 +1,3 @@
-version: '3.8'
-
 # ==============================================================================
 # Cyber Crew CTF - Local Development Docker Compose
 # Runs Redis and local utilities. Frontend & backend can also run with local npm.
