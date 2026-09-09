@@ -4,6 +4,11 @@
 # ==============================================================================
 set -euo pipefail
 
+# Ensure script operates from repository root directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
+
 # Text Formatting
 GREEN='\033[0;32m'
 RED='\033[0;31m'
