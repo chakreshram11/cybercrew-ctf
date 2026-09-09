@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
-import { Challenge, Category } from '../../types';
+import { Challenge, Category, TeamProgress } from '../../types';
 import { ChallengeCard } from '../../components/challenges/ChallengeCard';
 import { ChallengeModal } from '../../components/challenges/ChallengeModal';
-import { Flag, Search, Filter, Terminal, ShieldAlert } from 'lucide-react';
+import { Flag, Search, Filter, Terminal, ShieldAlert, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const ChallengesPage: React.FC = () => {
   const { user, team } = useAuth();
+  const queryClient = useQueryClient();
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('ALL');
   const [solveStatusFilter, setSolveStatusFilter] = useState<'ALL' | 'SOLVED' | 'UNSOLVED'>('ALL');
@@ -24,13 +25,30 @@ export const ChallengesPage: React.FC = () => {
     },
   });
 
+  // Fetch Team Progress
+  const {
+    data: progressData,
+    isLoading: isProgressLoading,
+    isError: isProgressError,
+    refetch: refetchProgress,
+  } = useQuery({
+    queryKey: ['team-progress', team?.id],
+    queryFn: async () => {
+      if (!team) return null;
+      const res = await api.get<TeamProgress>('/teams/me/progress');
+      return res.success && res.data ? res.data : null;
+    },
+    enabled: !!team,
+  });
+
   // Fetch Challenges
   const {
     data: challengesData,
-    isLoading,
-    refetch,
+    isLoading: isChallengesLoading,
+    isError: isChallengesError,
+    refetch: refetchChallenges,
   } = useQuery({
-    queryKey: ['challenges'],
+    queryKey: ['challenges', team?.id],
     queryFn: async () => {
       const res = await api.get<Challenge[]>('/challenges');
       return res.success && res.data ? res.data : [];
@@ -38,35 +56,84 @@ export const ChallengesPage: React.FC = () => {
   });
 
   const categories = categoriesData || [];
-  const challenges = challengesData || [];
+  const rawChallenges = challengesData || [];
 
-  // Filter challenges
+  // Derived set of team-solved challenge IDs (from progress endpoint or challenge fields)
+  const solvedChallengeIds = new Set<string>(
+    progressData?.solved_challenge_ids ||
+      rawChallenges.filter((c) => c.is_solved).map((c) => c.id)
+  );
+
+  // Attach accurate team-specific solve status to challenges
+  const challenges: Challenge[] = rawChallenges.map((c) => ({
+    ...c,
+    is_solved: !!c.is_solved || solvedChallengeIds.has(c.id),
+  }));
+
+  // Dynamic calculation of team progress metrics
+  const solvedCount = progressData
+    ? progressData.solved_count
+    : challenges.filter((c) => c.is_solved).length;
+  const totalChallenges = progressData
+    ? progressData.total_challenges
+    : challenges.length;
+  const earnedPoints = progressData
+    ? progressData.earned_points
+    : (team?.score ?? 0);
+  const totalPossiblePoints = progressData
+    ? progressData.total_possible_points
+    : challenges.reduce((acc, c) => acc + (c.base_points || 500), 0);
+
+  // Filter challenges across search, category, difficulty, and solve status simultaneously
   const filteredChallenges = challenges.filter((c) => {
     // Category match
-    if (selectedCategory !== 'ALL' && c.category_id !== selectedCategory && c.challenge_type !== selectedCategory) {
-      return false;
+    if (selectedCategory !== 'ALL') {
+      const catMatch =
+        c.category_id === selectedCategory ||
+        c.category?.id === selectedCategory ||
+        c.challenge_type === selectedCategory;
+      if (!catMatch) return false;
     }
+
     // Difficulty match
     if (selectedDifficulty !== 'ALL' && c.difficulty !== selectedDifficulty) {
       return false;
     }
-    // Solve status
-    if (solveStatusFilter === 'SOLVED' && !c.is_solved) return false;
-    if (solveStatusFilter === 'UNSOLVED' && c.is_solved) return false;
-    // Search query
+
+    // Solve status match for authenticated team
+    const isSolved = c.is_solved;
+    if (solveStatusFilter === 'SOLVED' && !isSolved) return false;
+    if (solveStatusFilter === 'UNSOLVED' && isSolved) return false;
+
+    // Search query match against name, description, category name, or slug
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase().trim();
       const matchName = c.name.toLowerCase().includes(q);
       const matchDesc = c.description.toLowerCase().includes(q);
-      const matchCat = c.category?.name.toLowerCase().includes(q) || false;
-      if (!matchName && !matchDesc && !matchCat) return false;
+      const matchCat =
+        c.category?.name.toLowerCase().includes(q) ||
+        c.challenge_type.toLowerCase().includes(q);
+      const matchSlug = c.slug.toLowerCase().includes(q);
+      if (!matchName && !matchDesc && !matchCat && !matchSlug) return false;
     }
+
     return true;
   });
 
-  const totalPoints = challenges.reduce((acc, c) => acc + (c.current_points || c.base_points), 0);
-  const solvedChallenges = challenges.filter((c) => c.is_solved);
-  const solvedPoints = solvedChallenges.reduce((acc, c) => acc + (c.current_points || c.base_points), 0);
+  const handleResetFilters = () => {
+    setSelectedCategory('ALL');
+    setSelectedDifficulty('ALL');
+    setSolveStatusFilter('ALL');
+    setSearchQuery('');
+  };
+
+  const handleSolveSuccess = () => {
+    queryClient.invalidateQueries({ queryKey: ['challenges'] });
+    queryClient.invalidateQueries({ queryKey: ['team-progress'] });
+    queryClient.invalidateQueries({ queryKey: ['scoreboard'] });
+    refetchChallenges();
+    refetchProgress();
+  };
 
   return (
     <div className="space-y-8">
@@ -92,16 +159,28 @@ export const ChallengesPage: React.FC = () => {
             <div className="h-6 w-px bg-slate-800" />
             <div>
               <span className="text-slate-400 block text-[10px]">SOLVED</span>
-              <span className="font-bold text-emerald-400">
-                {solvedChallenges.length} / {challenges.length}
-              </span>
+              {isProgressLoading && !progressData ? (
+                <span className="font-bold text-slate-500">— / —</span>
+              ) : isProgressError ? (
+                <span className="font-bold text-rose-400">Error</span>
+              ) : (
+                <span className="font-bold text-emerald-400">
+                  {solvedCount} / {totalChallenges}
+                </span>
+              )}
             </div>
             <div className="h-6 w-px bg-slate-800" />
             <div>
               <span className="text-slate-400 block text-[10px]">POINTS</span>
-              <span className="font-bold text-cyan-400">
-                {solvedPoints} / {totalPoints}
-              </span>
+              {isProgressLoading && !progressData ? (
+                <span className="font-bold text-slate-500">— / —</span>
+              ) : isProgressError ? (
+                <span className="font-bold text-rose-400">Error</span>
+              ) : (
+                <span className="font-bold text-cyan-400">
+                  {earnedPoints} / {totalPossiblePoints}
+                </span>
+              )}
             </div>
           </div>
         ) : (
@@ -147,7 +226,7 @@ export const ChallengesPage: React.FC = () => {
             <div className="inline-flex rounded-lg border border-slate-800 bg-slate-900/80 p-0.5 text-xs font-mono">
               <button
                 onClick={() => setSolveStatusFilter('ALL')}
-                className={`px-2.5 py-1.5 rounded-md ${
+                className={`px-2.5 py-1.5 rounded-md transition-colors ${
                   solveStatusFilter === 'ALL'
                     ? 'bg-cyan-500/20 text-cyan-400 font-bold'
                     : 'text-slate-400 hover:text-white'
@@ -157,7 +236,7 @@ export const ChallengesPage: React.FC = () => {
               </button>
               <button
                 onClick={() => setSolveStatusFilter('UNSOLVED')}
-                className={`px-2.5 py-1.5 rounded-md ${
+                className={`px-2.5 py-1.5 rounded-md transition-colors ${
                   solveStatusFilter === 'UNSOLVED'
                     ? 'bg-cyan-500/20 text-cyan-400 font-bold'
                     : 'text-slate-400 hover:text-white'
@@ -167,7 +246,7 @@ export const ChallengesPage: React.FC = () => {
               </button>
               <button
                 onClick={() => setSolveStatusFilter('SOLVED')}
-                className={`px-2.5 py-1.5 rounded-md ${
+                className={`px-2.5 py-1.5 rounded-md transition-colors ${
                   solveStatusFilter === 'SOLVED'
                     ? 'bg-emerald-500/20 text-emerald-400 font-bold'
                     : 'text-slate-400 hover:text-white'
@@ -208,18 +287,39 @@ export const ChallengesPage: React.FC = () => {
       </div>
 
       {/* Challenges Grid */}
-      {isLoading ? (
+      {isChallengesLoading ? (
         <div className="py-24 text-center font-mono text-cyan-400 text-sm flex items-center justify-center gap-2">
           <Terminal className="w-5 h-5 animate-spin" />
           <span>QUERYING CHALLENGE CATALOG...</span>
+        </div>
+      ) : isChallengesError ? (
+        <div className="py-20 text-center rounded-2xl border border-rose-500/30 bg-[#090e1c] p-8">
+          <ShieldAlert className="w-10 h-10 text-rose-500 mx-auto mb-3" />
+          <h3 className="text-base font-mono font-bold text-rose-300 mb-1">FAILED TO LOAD CHALLENGES</h3>
+          <p className="text-xs text-slate-500 font-mono mb-4">
+            Unable to connect to the challenge repository.
+          </p>
+          <button
+            onClick={() => refetchChallenges()}
+            className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition-colors"
+          >
+            RETRY QUERY
+          </button>
         </div>
       ) : filteredChallenges.length === 0 ? (
         <div className="py-20 text-center rounded-2xl border border-slate-800 bg-[#090e1c] p-8">
           <Filter className="w-10 h-10 text-slate-600 mx-auto mb-3" />
           <h3 className="text-base font-mono font-bold text-slate-300 mb-1">NO CHALLENGES FOUND</h3>
-          <p className="text-xs text-slate-500 font-mono">
-            Try adjusting your category or difficulty filters.
+          <p className="text-xs text-slate-500 font-mono mb-4">
+            No challenges match your selected filters.
           </p>
+          <button
+            onClick={handleResetFilters}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>RESET ALL FILTERS</span>
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -240,7 +340,7 @@ export const ChallengesPage: React.FC = () => {
           isOpen={!!activeChallenge}
           onClose={() => setActiveChallenge(null)}
           onSolveSuccess={() => {
-            refetch();
+            handleSolveSuccess();
           }}
         />
       )}

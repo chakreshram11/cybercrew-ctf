@@ -165,4 +165,109 @@ describe('TeamsService - Authorization & Invitation Code Access', () => {
       ).rejects.toThrow(NotFoundException);
     });
   });
+
+  describe('getMyTeamProgress (Team Progress Metrics)', () => {
+    it('returns empty fallback metrics when user has no team', async () => {
+      const userWithoutTeam: AuthUser = {
+        id: 'user-no-team',
+        email: 'noteam@cybercrew.online',
+        username: 'solitary_agent',
+        role: 'PARTICIPANT',
+        team_id: null,
+      };
+
+      const result = await service.getMyTeamProgress(userWithoutTeam);
+      expect(result.team).toBeNull();
+      expect(result.solved_count).toBe(0);
+      expect(result.total_challenges).toBe(0);
+      expect(result.earned_points).toBe(0);
+      expect(result.total_possible_points).toBe(0);
+      expect(result.solved_challenge_ids).toEqual([]);
+    });
+
+    it('returns accurate team progress derived from authenticated user session', async () => {
+      const userWithTeam: AuthUser = {
+        id: 'user-team-a',
+        email: 'teama@cybercrew.online',
+        username: 'team_member_a',
+        role: 'PARTICIPANT',
+        team_id: 'team-uuid-a',
+      };
+
+      // Mock team database response
+      mockSupabaseClient.maybeSingle.mockResolvedValueOnce({
+        data: {
+          id: 'team-uuid-a',
+          name: 'Team Alpha',
+          slug: 'team-alpha',
+          score: 1100,
+        },
+        error: null,
+      });
+
+      // Mock active challenges response
+      const mockChallenges = [
+        { id: 'chal-1', base_points: 500, current_points: 500 },
+        { id: 'chal-2', base_points: 500, current_points: 500 },
+        { id: 'chal-3', base_points: 500, current_points: 500 },
+        { id: 'chal-4', base_points: 500, current_points: 500 },
+      ];
+
+      // Mock solves response
+      const mockSolves = [
+        { challenge_id: 'chal-1' },
+        { challenge_id: 'chal-2' },
+      ];
+
+      // Mock chain for challenges and solves
+      const mockQueryChain = (dataToReturn: any) => {
+        const chain: any = {
+          eq: jest.fn().mockImplementation(() => chain),
+          then: (resolve: any) => resolve({ data: dataToReturn, error: null }),
+        };
+        return chain;
+      };
+
+      mockSupabaseClient.from.mockImplementation((table: string) => {
+        if (table === 'teams') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            maybeSingle: jest.fn().mockResolvedValue({
+              data: {
+                id: 'team-uuid-a',
+                name: 'Team Alpha',
+                slug: 'team-alpha',
+                score: 1100,
+              },
+              error: null,
+            }),
+          };
+        }
+        if (table === 'challenges') {
+          return {
+            select: jest.fn().mockReturnValue(mockQueryChain(mockChallenges)),
+          };
+        }
+        if (table === 'solves') {
+          return {
+            select: jest.fn().mockReturnValue(mockQueryChain(mockSolves)),
+          };
+        }
+        return mockSupabaseClient;
+      });
+
+      const result = await service.getMyTeamProgress(userWithTeam);
+      expect(result.team).toEqual({
+        id: 'team-uuid-a',
+        name: 'Team Alpha',
+        slug: 'team-alpha',
+      });
+      expect(result.solved_count).toBe(2);
+      expect(result.total_challenges).toBe(4);
+      expect(result.earned_points).toBe(1100);
+      expect(result.total_possible_points).toBe(2000);
+      expect(result.solved_challenge_ids).toEqual(['chal-1', 'chal-2']);
+    });
+  });
 });

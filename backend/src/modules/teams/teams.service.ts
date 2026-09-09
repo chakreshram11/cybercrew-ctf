@@ -549,4 +549,85 @@ export class TeamsService {
       reason,
     };
   }
+
+  /**
+   * Retrieves current authenticated squad's progress and solve metrics.
+   * Derives team affiliation directly from authenticated user session (Prevents IDOR).
+   */
+  async getMyTeamProgress(user?: AuthUser) {
+    if (!user?.team_id) {
+      return {
+        team: null,
+        solved_count: 0,
+        total_challenges: 0,
+        earned_points: 0,
+        total_possible_points: 0,
+        solved_challenge_ids: [],
+      };
+    }
+
+    const client = this.supabaseService.getClient();
+
+    // Fetch team
+    const { data: team, error: teamError } = await client
+      .from('teams')
+      .select('id, name, slug, score')
+      .eq('id', user.team_id)
+      .maybeSingle();
+
+    if (teamError || !team) {
+      return {
+        team: null,
+        solved_count: 0,
+        total_challenges: 0,
+        earned_points: 0,
+        total_possible_points: 0,
+        solved_challenge_ids: [],
+      };
+    }
+
+    // Fetch all active & published challenges
+    const { data: challenges, error: chalError } = await client
+      .from('challenges')
+      .select('id, base_points, current_points')
+      .eq('is_published', true)
+      .eq('is_active', true);
+
+    if (chalError) {
+      throw new InternalServerErrorException('Failed to calculate challenge inventory.');
+    }
+
+    const activeChallenges = challenges || [];
+    const totalChallenges = activeChallenges.length;
+    const totalPossiblePoints = activeChallenges.reduce(
+      (acc, c) => acc + (c.base_points || 500),
+      0,
+    );
+
+    // Fetch team solves
+    const { data: solves, error: solveError } = await client
+      .from('solves')
+      .select('challenge_id')
+      .eq('team_id', user.team_id);
+
+    if (solveError) {
+      throw new InternalServerErrorException('Failed to retrieve squad solves.');
+    }
+
+    const solvedChallengeIds = (solves || []).map((s) => s.challenge_id);
+    const solvedCount = solvedChallengeIds.length;
+
+    return {
+      team: {
+        id: team.id,
+        name: team.name,
+        slug: team.slug,
+      },
+      solved_count: solvedCount,
+      total_challenges: totalChallenges,
+      earned_points: team.score,
+      total_possible_points: totalPossiblePoints,
+      solved_challenge_ids: solvedChallengeIds,
+    };
+  }
 }

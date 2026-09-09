@@ -30,10 +30,15 @@ async function runServiceRoleRegression() {
   console.log('Step 1: Backend service-role client initialized.');
 
   // 2. Participant 1 authenticates
-  console.log('Step 2: Authenticating Participant 1 (chakreshram05@gmail.com)...');
+  console.log('Step 2: Authenticating Participant 1...');
+  const testParticipantEmail = `service_role_part_${ts}@test.cybercrew.online`;
+  await request('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username: `sr_part_${ts.toString().slice(-4)}`, email: testParticipantEmail, password: 'TestPassword123!' }),
+  });
   const login1 = await request('/auth/login', {
     method: 'POST',
-    body: JSON.stringify({ email: 'chakreshram05@gmail.com', password: 'Chakreshram@152852' }),
+    body: JSON.stringify({ email: testParticipantEmail, password: 'TestPassword123!' }),
   });
   if (!login1.ok) throw new Error('Participant 1 login failed');
   console.log('✓ Participant 1 authenticated successfully. Role:', login1.data.data.user.role);

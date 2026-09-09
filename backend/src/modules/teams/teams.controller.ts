@@ -41,6 +41,18 @@ export class TeamsController {
     return this.teamsService.joinTeam(user, dto);
   }
 
+  @Get('teams/me/progress')
+  @ApiOperation({ summary: 'Retrieve authenticated operative squad progress' })
+  async getMyTeamProgress(@CurrentUser() user: AuthUser) {
+    return this.teamsService.getMyTeamProgress(user);
+  }
+
+  @Get('teams/current/progress')
+  @ApiOperation({ summary: 'Retrieve authenticated operative squad progress (alias)' })
+  async getCurrentTeamProgress(@CurrentUser() user: AuthUser) {
+    return this.teamsService.getMyTeamProgress(user);
+  }
+
   @Get('teams/:slug')
   @Public()
   @ApiOperation({ summary: 'Retrieve squad dossier by slug' })

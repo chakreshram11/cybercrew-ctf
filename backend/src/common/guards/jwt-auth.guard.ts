@@ -29,12 +29,12 @@ export class JwtAuthGuard implements CanActivate {
       context.getClass(),
     ]);
 
-    if (isPublic) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest();
     const authHeader = request.headers.authorization;
+
+    if (isPublic && (!authHeader || !authHeader.startsWith('Bearer '))) {
+      return true;
+    }
 
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       throw new UnauthorizedException('Missing or invalid Authorization header.');
@@ -138,6 +138,10 @@ export class JwtAuthGuard implements CanActivate {
 
       return true;
     } catch (err: any) {
+      if (isPublic) {
+        request.user = undefined;
+        return true;
+      }
       if (err instanceof UnauthorizedException) {
         throw err;
       }

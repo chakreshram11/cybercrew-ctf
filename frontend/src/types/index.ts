@@ -210,6 +210,19 @@ export interface ScoreboardEntry {
   last_solve_at?: string | null;
 }
 
+export interface TeamProgress {
+  team: {
+    id: string;
+    name: string;
+    slug: string;
+  } | null;
+  solved_count: number;
+  total_challenges: number;
+  earned_points: number;
+  total_possible_points: number;
+  solved_challenge_ids: string[];
+}
+
 export interface Announcement {
   id: string;
   title: string;

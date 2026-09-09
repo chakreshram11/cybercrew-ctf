@@ -59,8 +59,24 @@ async function runSecuritySuite() {
     method: 'POST',
     body: JSON.stringify({ email: participantEmail, password: participantPass }),
   });
-  const partToken = partAuthRes.data?.data?.access_token;
-  const partUser = partAuthRes.data?.data?.user;
+  let partToken = partAuthRes.data?.data?.access_token;
+  let partUser = partAuthRes.data?.data?.user;
+
+  // Ensure test participant is in a squad for flag & hint submission tests
+  if (partUser && !partUser.team_id) {
+    const createTeamRes = await request('/teams', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${partToken}` },
+      body: JSON.stringify({ name: `SecurityAuditSquad_${ts.toString().slice(-4)}` }),
+    });
+    // Re-login to refresh user token payload with new team_id
+    const relogin = await request('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: participantEmail, password: participantPass }),
+    });
+    partToken = relogin.data?.data?.access_token;
+    partUser = relogin.data?.data?.user;
+  }
 
   // ---------------------------------------------------------------------------
   // 1. AUTHENTICATION (AUTH-001, AUTH-002, AUTH-003)

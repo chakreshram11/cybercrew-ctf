@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Challenge, ChallengeHint } from '../../types';
 import { DifficultyBadge, CategoryBadge } from '../common/Badges';
 import {
@@ -32,6 +33,7 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
   onClose,
   onSolveSuccess,
 }) => {
+  const queryClient = useQueryClient();
   const { user, team, refreshProfile } = useAuth();
   const [flag, setFlag] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -87,6 +89,9 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
             }`,
           });
           challenge.is_solved = true;
+          queryClient.invalidateQueries({ queryKey: ['challenges'] });
+          queryClient.invalidateQueries({ queryKey: ['team-progress'] });
+          queryClient.invalidateQueries({ queryKey: ['scoreboard'] });
           onSolveSuccess?.(res.data.points_awarded, res.data.is_first_blood);
           await refreshProfile();
         } else if (res.data.already_solved) {
@@ -135,6 +140,8 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
               : h
           )
         );
+        queryClient.invalidateQueries({ queryKey: ['team-progress'] });
+        queryClient.invalidateQueries({ queryKey: ['scoreboard'] });
         await refreshProfile();
       } else {
         setHintError(res.error?.message || 'Failed to unlock hint. Insufficient points or restriction.');
