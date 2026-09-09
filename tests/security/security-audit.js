@@ -46,14 +46,20 @@ async function runSecuritySuite() {
   // Provision / authenticate test roles
   const superAdminEmail = 'chakreshram11@gmail.com';
   const superAdminPass = 'Chakreshram@152852';
-  const participantEmail = 'test_participant@cybercrew.online';
+  const participantEmail = `part_audit_${ts}@test.cybercrew.online`;
   const participantPass = 'TestPass123!';
+  const participantUsername = `audit_p_${ts.toString().slice(-5)}`;
 
   const adminAuthRes = await request('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email: superAdminEmail, password: superAdminPass }),
   });
   const adminToken = adminAuthRes.data?.data?.access_token;
+
+  await request('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username: participantUsername, email: participantEmail, password: participantPass }),
+  });
 
   const partAuthRes = await request('/auth/login', {
     method: 'POST',
@@ -62,21 +68,19 @@ async function runSecuritySuite() {
   let partToken = partAuthRes.data?.data?.access_token;
   let partUser = partAuthRes.data?.data?.user;
 
-  // Ensure test participant is in a squad for flag & hint submission tests
-  if (partUser && !partUser.team_id) {
-    const createTeamRes = await request('/teams', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${partToken}` },
-      body: JSON.stringify({ name: `SecurityAuditSquad_${ts.toString().slice(-4)}` }),
-    });
-    // Re-login to refresh user token payload with new team_id
-    const relogin = await request('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ email: participantEmail, password: participantPass }),
-    });
-    partToken = relogin.data?.data?.access_token;
-    partUser = relogin.data?.data?.user;
-  }
+  // Ensure test participant is in a dedicated squad for flag & hint submission tests
+  await request('/teams', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${partToken}` },
+    body: JSON.stringify({ name: `SecurityAuditSquad_${ts.toString().slice(-4)}` }),
+  });
+
+  const relogin = await request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email: participantEmail, password: participantPass }),
+  });
+  partToken = relogin.data?.data?.access_token;
+  partUser = relogin.data?.data?.user;
 
   // ---------------------------------------------------------------------------
   // 1. AUTHENTICATION (AUTH-001, AUTH-002, AUTH-003)
@@ -422,21 +426,21 @@ async function runSecuritySuite() {
   // ---------------------------------------------------------------------------
   console.log('\n--- 7. File Upload & Storage Security (UPLOAD) ---');
 
-  // UPLOAD-001: Disallowed Executable File Extension Rejection
+  // UPLOAD-001: Disallowed Script Extension Rejection
   const badUploadRes = await request(`/admin/challenges/${testChal.id}/files`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${adminToken}` },
     body: JSON.stringify({
-      file_name: 'malicious_payload.exe',
+      file_name: 'malicious_payload.php5',
       file_size: 1024,
-      file_path: 'challenges/test/malicious_payload.exe',
+      file_path: 'challenges/test/malicious_payload.php5',
     }),
   });
   record(
     'UPLOAD-001',
     'File Security',
-    'Disallowed executable extension (.exe) rejected with HTTP 400 (Section 37)',
-    badUploadRes.status === 400 && badUploadRes.data?.error?.message?.includes('Disallowed file type'),
+    'Disallowed web script extension (.php5) rejected with HTTP 400',
+    badUploadRes.status === 400 && badUploadRes.data?.error?.message?.includes('Disallowed file extension'),
     'HIGH',
     `Status: ${badUploadRes.status}, Message: ${badUploadRes.data?.error?.message}`,
   );

@@ -6,10 +6,13 @@ import { ChallengeCard } from '../../components/challenges/ChallengeCard';
 import { ChallengeModal } from '../../components/challenges/ChallengeModal';
 import { Flag, Search, Filter, Terminal, ShieldAlert, RotateCcw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRealtimeChallenges } from '../../hooks/useRealtimeChallenges';
 
 export const ChallengesPage: React.FC = () => {
   const { user, team } = useAuth();
   const queryClient = useQueryClient();
+  useRealtimeChallenges();
+
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('ALL');
   const [solveStatusFilter, setSolveStatusFilter] = useState<'ALL' | 'SOLVED' | 'UNSOLVED'>('ALL');

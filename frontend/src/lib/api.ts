@@ -109,6 +109,53 @@ class ApiClient {
   delete<T>(endpoint: string, options?: RequestInit) {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' });
   }
+
+  async uploadFile<T>(endpoint: string, formData: FormData, options?: RequestInit): Promise<ApiResponse<T>> {
+    const url = `${this.baseUrl}${endpoint.startsWith('/') ? '' : '/'}${endpoint}`;
+    const headers: Record<string, string> = {};
+
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.access_token) {
+        headers['Authorization'] = `Bearer ${data.session.access_token}`;
+      }
+    } catch {
+      // Session fallback
+    }
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        method: 'POST',
+        headers: {
+          ...headers,
+          ...(options?.headers || {}),
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.error || {
+            code: `HTTP_${response.status}`,
+            message: data.message || 'File upload failed.',
+          },
+        };
+      }
+
+      return data as ApiResponse<T>;
+    } catch (err: any) {
+      return {
+        success: false,
+        error: {
+          code: 'NETWORK_ERROR',
+          message: err.message || 'Unable to connect to upload server.',
+        },
+      };
+    }
+  }
 }
 
 export const api = new ApiClient(API_BASE_URL);

@@ -182,7 +182,7 @@ async function runAcceptanceTest() {
     headers: { Authorization: `Bearer ${p1Token}` },
     body: JSON.stringify({ flag: 'CCCTF{totally_wrong_acceptance_guess}' }),
   });
-  if (wrongFlagRes.data.data.is_correct !== false) throw new Error('Wrong flag was not rejected!');
+  if (wrongFlagRes.data?.data?.is_correct !== false) throw new Error('Wrong flag was not rejected!');
   console.log('✓ 13. Wrong flag submitted -> Correctly rejected with friendly feedback.');
 
   // 13. Submit Correct Flag -> Verify Solve, Points (500 + 50 FB = 550), First Blood

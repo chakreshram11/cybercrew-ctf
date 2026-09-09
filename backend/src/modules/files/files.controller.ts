@@ -5,8 +5,12 @@ import {
   Delete,
   Param,
   Body,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { FilesService } from './files.service';
 import { CreateFileDto } from './dto/create-file.dto';
 import { CurrentUser, AuthUser } from '../../common/decorators/current-user.decorator';
@@ -37,6 +41,31 @@ export class FilesController {
   }
 
   // Administrative Endpoints
+  @Post('admin/challenges/:challengeId/files/upload')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'CHALLENGE_AUTHOR')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload file artifact directly to storage and register in challenge' })
+  async uploadFile(
+    @Param('challengeId') challengeId: string,
+    @UploadedFile() file: any,
+    @CurrentUser() user: AuthUser,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file payload attached to upload request.');
+    }
+    return this.filesService.uploadFile(
+      challengeId,
+      {
+        originalname: file.originalname,
+        buffer: file.buffer,
+        size: file.size,
+        mimetype: file.mimetype,
+      },
+      user,
+    );
+  }
+
   @Post('admin/challenges/:challengeId/files')
   @Roles('ADMIN', 'SUPER_ADMIN', 'CHALLENGE_AUTHOR')
   @ApiOperation({ summary: 'Register uploaded challenge artifact' })

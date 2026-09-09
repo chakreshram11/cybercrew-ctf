@@ -153,6 +153,16 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
     }
   };
 
+  const handleDownloadArtifact = async (fileId: string, defaultPath: string) => {
+    try {
+      const res = await api.get<{ download_url: string }>(`/challenges/files/${fileId}/download`);
+      const targetUrl = res.success && res.data?.download_url ? res.data.download_url : defaultPath;
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    } catch {
+      window.open(defaultPath, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="relative w-full max-w-2xl bg-[#090e1c] border border-slate-700/80 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
@@ -238,13 +248,11 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
               </h4>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {challenge.files.map((file) => (
-                  <a
+                  <button
                     key={file.id}
-                    href={file.file_path}
-                    download={file.file_name}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-cyan-500/50 text-xs font-mono text-slate-200 hover:text-cyan-400 transition-colors"
+                    type="button"
+                    onClick={() => handleDownloadArtifact(file.id, file.file_path)}
+                    className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 hover:border-cyan-500/50 text-xs font-mono text-slate-200 hover:text-cyan-400 transition-colors w-full text-left"
                   >
                     <div className="flex items-center gap-2 truncate">
                       <Download className="w-4 h-4 text-cyan-400 flex-shrink-0" />
@@ -253,7 +261,7 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
                     <span className="text-slate-500 text-[10px] ml-2">
                       {(file.file_size / 1024).toFixed(1)} KB
                     </span>
-                  </a>
+                  </button>
                 ))}
               </div>
             </div>

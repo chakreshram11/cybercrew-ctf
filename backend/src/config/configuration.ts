@@ -17,6 +17,10 @@ export interface AppConfig {
     submissionThrottleTtl: number;
     submissionThrottleLimit: number;
   };
+  files: {
+    maxFileSizeMb: number;
+    maxFilesPerChallenge: number;
+  };
   redis: {
     url?: string;
   };
@@ -41,6 +45,10 @@ export default (): AppConfig => ({
     throttleLimit: parseInt(process.env.THROTTLE_LIMIT || '60', 10),
     submissionThrottleTtl: parseInt(process.env.SUBMISSION_THROTTLE_TTL || '60', 10),
     submissionThrottleLimit: parseInt(process.env.SUBMISSION_THROTTLE_LIMIT || '10', 10),
+  },
+  files: {
+    maxFileSizeMb: parseInt(process.env.MAX_CHALLENGE_FILE_SIZE_MB || '100', 10),
+    maxFilesPerChallenge: parseInt(process.env.MAX_CHALLENGE_FILES || '20', 10),
   },
   redis: {
     url: process.env.REDIS_URL,

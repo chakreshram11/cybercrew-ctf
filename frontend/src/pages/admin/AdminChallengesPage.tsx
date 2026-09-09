@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { Challenge, Category, ChallengeDifficulty, ChallengeType, ChallengeStatus } from '../../types';
 import { DifficultyBadge, CategoryBadge, StatusBadge } from '../../components/common/Badges';
@@ -14,11 +14,38 @@ import {
   FileCode,
   Upload,
   Download,
+  X,
+  CheckCircle2,
 } from 'lucide-react';
 import { formatPoints } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
+import { useRealtimeChallenges } from '../../hooks/useRealtimeChallenges';
+
+const ALLOWED_EXTENSIONS = new Set([
+  // Images
+  'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg',
+  // Documents
+  'pdf', 'txt', 'md', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx',
+  // Archives
+  'zip', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'rar',
+  // Audio
+  'mp3', 'wav', 'ogg', 'flac', 'm4a',
+  // Video
+  'mp4', 'webm', 'mov', 'mkv',
+  // Networking / Forensics
+  'pcap', 'pcapng', 'cap', 'har', 'eml', 'evtx', 'reg', 'log', 'vmem', 'dmp', 'raw',
+  // Data
+  'json', 'xml', 'csv', 'yaml', 'yml',
+  // Code / Source
+  'py', 'js', 'ts', 'java', 'c', 'cpp', 'h', 'hpp', 'cs', 'go', 'rs', 'php', 'sh', 'ps1', 'sql', 'html', 'css', 'asm',
+  // Security / CTF Binaries
+  'bin', 'elf', 'exe', 'dll', 'apk', 'ipa', 'iso', 'img',
+]);
 
 export const AdminChallengesPage: React.FC = () => {
+  const queryClient = useQueryClient();
+  useRealtimeChallenges();
+
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
@@ -56,6 +83,12 @@ export const AdminChallengesPage: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Multi-file attachment upload state
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
   const { data: challengesData, isLoading, refetch } = useQuery({
     queryKey: ['admin-challenges'],
     queryFn: async () => {
@@ -74,9 +107,6 @@ export const AdminChallengesPage: React.FC = () => {
 
   const challenges = challengesData || [];
   const categories = categoriesData || [];
-
-  const [uploadingFile, setUploadingFile] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const { data: challengeFiles, refetch: refetchChallengeFiles } = useQuery({
     queryKey: ['admin-challenge-files', editingChallenge?.id],
@@ -119,47 +149,98 @@ export const AdminChallengesPage: React.FC = () => {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !editingChallenge) return;
+  const validateFiles = (files: FileList | File[], existingCount: number = 0): { valid: File[]; error?: string } => {
+    const fileArray = Array.from(files);
+    const maxMb = 100;
+    const maxFiles = 20;
 
-    setUploadingFile(true);
-    setUploadError(null);
-
-    try {
-      const storagePath = `${editingChallenge.id}/${file.name}`;
-      const { error: storageError } = await supabase.storage
-        .from('challenge-files')
-        .upload(storagePath, file, { upsert: true });
-
-      if (storageError) {
-        setUploadError(storageError.message);
-        setUploadingFile(false);
-        return;
-      }
-
-      const { data: urlData } = supabase.storage.from('challenge-files').getPublicUrl(storagePath);
-      const publicUrl = urlData?.publicUrl || storagePath;
-
-      const res = await api.post(`/admin/challenges/${editingChallenge.id}/files`, {
-        file_name: file.name,
-        file_size: file.size,
-        file_path: publicUrl,
-        mime_type: file.type || 'application/octet-stream',
-      });
-
-      if (res.success) {
-        refetchChallengeFiles();
-        refetch();
-      } else {
-        setUploadError(res.error?.message || 'Failed to register file artifact.');
-      }
-    } catch (err: any) {
-      setUploadError(err.message || 'File upload failed.');
-    } finally {
-      setUploadingFile(false);
-      e.target.value = '';
+    if (existingCount + pendingFiles.length + fileArray.length > maxFiles) {
+      return { valid: [], error: `Exceeds maximum allowed attachments (${maxFiles} files per challenge).` };
     }
+
+    const validFiles: File[] = [];
+    for (const f of fileArray) {
+      const ext = f.name.split('.').pop()?.toLowerCase() || '';
+      if (!ALLOWED_EXTENSIONS.has(ext)) {
+        return {
+          valid: [],
+          error: `Disallowed extension: .${ext}. Allowed formats include PNG, JPG, PDF, ZIP, 7Z, PCAP, PCAPNG, MP3, WAV, MP4, PY, JS, BIN, ELF, EXE, APK, ISO, and standard CTF artifacts.`,
+        };
+      }
+      if (f.size > maxMb * 1024 * 1024) {
+        return { valid: [], error: `File "${f.name}" exceeds maximum permitted size (${maxMb} MB).` };
+      }
+      validFiles.push(f);
+    }
+
+    return { valid: validFiles };
+  };
+
+  const handleAddFiles = (fileList: FileList | File[]) => {
+    setUploadError(null);
+    const existingCount = challengeFiles?.length || 0;
+    const { valid, error } = validateFiles(fileList, existingCount);
+    if (error) {
+      setUploadError(error);
+      return;
+    }
+    setPendingFiles((prev) => [...prev, ...valid]);
+  };
+
+  const handleRemovePendingFile = (index: number) => {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleAddFiles(e.dataTransfer.files);
+    }
+  };
+
+  const uploadSingleFileToChallenge = async (challengeId: string, file: File) => {
+    // Attempt 1: Direct backend multipart upload
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const uploadRes = await api.uploadFile(`/admin/challenges/${challengeId}/files/upload`, formData);
+    if (uploadRes.success) {
+      return { success: true };
+    }
+
+    // Fallback: Upload to Supabase Storage client directly and register
+    const storagePath = `challenges/${challengeId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const { error: storageError } = await supabase.storage
+      .from('challenge-files')
+      .upload(storagePath, file, { upsert: true });
+
+    if (storageError) {
+      return { success: false, error: storageError.message };
+    }
+
+    const { data: urlData } = supabase.storage.from('challenge-files').getPublicUrl(storagePath);
+    const publicUrl = urlData?.publicUrl || storagePath;
+
+    const regRes = await api.post(`/admin/challenges/${challengeId}/files`, {
+      file_name: file.name,
+      file_size: file.size,
+      file_path: publicUrl,
+      mime_type: file.type || 'application/octet-stream',
+    });
+
+    return { success: regRes.success, error: regRes.error?.message };
   };
 
   const handleDeleteFile = async (fileId: string) => {
@@ -169,10 +250,20 @@ export const AdminChallengesPage: React.FC = () => {
       if (res.success) {
         refetchChallengeFiles();
         refetch();
+        invalidateAllQueries();
       }
     } catch {
       alert('Failed to delete file.');
     }
+  };
+
+  const invalidateAllQueries = () => {
+    queryClient.invalidateQueries({ queryKey: ['challenges'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-challenges'] });
+    queryClient.invalidateQueries({ queryKey: ['team-progress'] });
+    queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['categories'] });
+    queryClient.invalidateQueries({ queryKey: ['scoreboard'] });
   };
 
   const filteredChallenges = challenges.filter((c) =>
@@ -182,6 +273,8 @@ export const AdminChallengesPage: React.FC = () => {
 
   const handleOpenCreate = () => {
     setEditingChallenge(null);
+    setPendingFiles([]);
+    setUploadError(null);
     const defaultCat = categories[0];
     const defaultType = defaultCat ? getChallengeTypeFromCategory(defaultCat.slug) : 'STATIC';
     setFormData({
@@ -206,6 +299,8 @@ export const AdminChallengesPage: React.FC = () => {
 
   const handleOpenEdit = (ch: Challenge) => {
     setEditingChallenge(ch);
+    setPendingFiles([]);
+    setUploadError(null);
     setFormData({
       name: ch.name,
       slug: ch.slug,
@@ -232,7 +327,6 @@ export const AdminChallengesPage: React.FC = () => {
     setSaving(true);
     setFormError(null);
 
-    // Sanitize payload: numbers as numbers, clean whitespace, empty optional fields to undefined
     const payload = {
       name: formData.name.trim(),
       slug: formData.slug.trim(),
@@ -251,38 +345,59 @@ export const AdminChallengesPage: React.FC = () => {
     };
 
     try {
+      let targetId = editingChallenge?.id;
+
       if (editingChallenge) {
-        // Update
+        // Update existing challenge
         const res = await api.patch(`/admin/challenges/${editingChallenge.id}`, payload);
-        if (res.success) {
-          setShowModal(false);
-          refetch();
-        } else {
+        if (!res.success) {
           setFormError(res.error?.message || 'Failed to update challenge.');
+          setSaving(false);
+          return;
         }
       } else {
-        // Create
-        const res = await api.post('/admin/challenges', payload);
-        if (res.success) {
-          setShowModal(false);
-          refetch();
-        } else {
+        // Create new challenge
+        const res = await api.post<any>('/admin/challenges', payload);
+        if (!res.success || !res.data) {
           setFormError(res.error?.message || 'Failed to create challenge.');
+          setSaving(false);
+          return;
         }
+        targetId = res.data.id;
       }
+
+      // Process pending file attachments if any
+      if (targetId && pendingFiles.length > 0) {
+        setUploadingFile(true);
+        for (const file of pendingFiles) {
+          const uploadRes = await uploadSingleFileToChallenge(targetId, file);
+          if (!uploadRes.success) {
+            console.warn(`File upload failed for ${file.name}: ${uploadRes.error}`);
+          }
+        }
+        setUploadingFile(false);
+      }
+
+      setShowModal(false);
+      setPendingFiles([]);
+      refetch();
+      refetchChallengeFiles();
+      invalidateAllQueries();
     } catch {
       setFormError('Network connection error.');
     } finally {
       setSaving(false);
+      setUploadingFile(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Are you sure you want to permanently delete this challenge?')) return;
+    if (!window.confirm('Are you sure you want to permanently delete this challenge and all attached artifacts?')) return;
     try {
       const res = await api.delete(`/admin/challenges/${id}`);
       if (res.success) {
         refetch();
+        invalidateAllQueries();
       }
     } catch {
       alert('Failed to delete challenge.');
@@ -624,74 +739,110 @@ export const AdminChallengesPage: React.FC = () => {
                 <div className="flex items-center justify-between">
                   <label className="block text-slate-300 uppercase tracking-wider text-xs font-bold flex items-center gap-1.5">
                     <FileCode className="w-4 h-4 text-cyan-400" />
-                    <span>Attached Artifacts & Files ({challengeFiles?.length || 0})</span>
+                    <span>Challenge Artifacts & Attachments ({ (challengeFiles?.length || 0) + pendingFiles.length })</span>
                   </label>
-
-                  {editingChallenge && (
-                    <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-xs font-bold transition-colors">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{uploadingFile ? 'UPLOADING...' : 'UPLOAD ARTIFACT'}</span>
-                      <input
-                        type="file"
-                        onChange={handleFileUpload}
-                        disabled={uploadingFile}
-                        className="hidden"
-                      />
-                    </label>
-                  )}
                 </div>
 
                 {uploadError && (
-                  <p className="text-xs text-rose-400 font-mono">{uploadError}</p>
+                  <p className="text-xs text-rose-400 font-mono bg-rose-500/10 p-2 rounded border border-rose-500/20">{uploadError}</p>
                 )}
 
-                {editingChallenge ? (
-                  <div className="space-y-2">
-                    {challengeFiles && challengeFiles.length > 0 ? (
-                      challengeFiles.map((f) => (
-                        <div
-                          key={f.id}
-                          className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono"
-                        >
-                          <div className="flex items-center gap-2 truncate">
-                            <FileCode className="w-4 h-4 text-cyan-400 flex-shrink-0" />
-                            <span className="font-semibold text-white truncate">{f.file_name}</span>
-                            <span className="text-slate-500 text-[10px]">
-                              ({(f.file_size / 1024).toFixed(1)} KB)
-                            </span>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <a
-                              href={f.file_path}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="p-1 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-800 transition-colors"
-                              title="Download artifact"
-                            >
-                              <Download className="w-3.5 h-3.5" />
-                            </a>
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteFile(f.id)}
-                              className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
-                              title="Delete artifact"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-slate-500 text-xs py-2">
-                        No artifacts currently attached. Upload files (e.g. .pem, .pcap, .zip, .elf) for participants to download.
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-slate-500 text-xs py-1 italic">
-                    Save the new challenge first to enable file attachments.
+                {/* Drag and Drop Upload Zone */}
+                <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  className={`p-4 rounded-xl border-2 border-dashed transition-all text-center relative ${
+                    dragActive
+                      ? 'border-cyan-400 bg-cyan-500/10'
+                      : 'border-slate-800 hover:border-slate-700 bg-slate-900/50'
+                  }`}
+                >
+                  <Upload className="w-6 h-6 text-cyan-400 mx-auto mb-1.5" />
+                  <p className="text-xs text-slate-200 font-bold mb-0.5">
+                    Drag & drop challenge artifacts here, or{' '}
+                    <label className="text-cyan-400 hover:underline cursor-pointer">
+                      browse files
+                      <input
+                        type="file"
+                        multiple
+                        onChange={(e) => e.target.files && handleAddFiles(e.target.files)}
+                        className="hidden"
+                      />
+                    </label>
                   </p>
+                  <p className="text-[10px] text-slate-500 font-mono">
+                    Supported: PNG, JPG, PDF, ZIP, 7Z, PCAP, PCAPNG, MP3, WAV, MP4, PY, JS, BIN, ELF, EXE, APK, ISO (Max 100 MB per file)
+                  </p>
+                </div>
+
+                {/* Pending Files to upload */}
+                {pendingFiles.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 font-mono uppercase font-bold">New Files Selected (Will upload on save):</span>
+                    {pendingFiles.map((file, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded bg-cyan-950/20 border border-cyan-500/30 text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <Upload className="w-3.5 h-3.5 text-cyan-400 flex-shrink-0" />
+                          <span className="text-slate-200 font-semibold truncate">{file.name}</span>
+                          <span className="text-slate-400 text-[10px]">({(file.size / (1024 * 1024)).toFixed(2)} MB)</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePendingFile(idx)}
+                          className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                          title="Remove file"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Existing Registered Files (when editing) */}
+                {editingChallenge && challengeFiles && challengeFiles.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    <span className="text-[10px] text-slate-400 font-mono uppercase font-bold">Existing Registered Artifacts:</span>
+                    {challengeFiles.map((f) => (
+                      <div
+                        key={f.id}
+                        className="flex items-center justify-between p-2 rounded bg-slate-900 border border-slate-800 text-xs font-mono"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                          <span className="font-semibold text-white truncate">{f.file_name}</span>
+                          <span className="text-slate-500 text-[10px]">
+                            ({(f.file_size / 1024).toFixed(1)} KB)
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={f.file_path}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 rounded text-slate-400 hover:text-cyan-400 hover:bg-slate-800 transition-colors"
+                            title="Download artifact"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteFile(f.id)}
+                            className="p-1 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                            title="Delete artifact"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 
@@ -705,10 +856,17 @@ export const AdminChallengesPage: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 rounded bg-cyan-400 text-slate-950 font-bold hover:bg-cyan-300 disabled:opacity-50"
+                  disabled={saving || uploadingFile}
+                  className="px-4 py-2 rounded bg-cyan-400 text-slate-950 font-bold hover:bg-cyan-300 disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {saving ? 'SAVING...' : 'SAVE CONFIGURATION'}
+                  {saving || uploadingFile ? (
+                    <>
+                      <Terminal className="w-3.5 h-3.5 animate-spin" />
+                      <span>{uploadingFile ? 'UPLOADING ATTACHMENTS...' : 'SAVING...'}</span>
+                    </>
+                  ) : (
+                    'SAVE CONFIGURATION'
+                  )}
                 </button>
               </div>
             </form>
