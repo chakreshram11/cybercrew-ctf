@@ -71,7 +71,14 @@ export const ChallengeCard: React.FC<ChallengeCardProps> = ({ challenge, onClick
           )}
         </div>
 
-        <div className="flex items-baseline gap-1 text-right">
+        <div
+          className="flex items-baseline gap-1 text-right"
+          title={
+            challenge.current_points && challenge.current_points !== challenge.base_points
+              ? `Current Value: ${challenge.current_points} PTS (Base: ${challenge.base_points} PTS)`
+              : `Base Points: ${challenge.base_points} PTS`
+          }
+        >
           <span className="text-base font-bold text-cyan-400 font-mono">
             {formatPoints(challenge.current_points || challenge.base_points)}
           </span>

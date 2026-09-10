@@ -448,7 +448,7 @@ export const AdminChallengesPage: React.FC = () => {
                 <th className="px-4 py-3">Challenge Name</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3">Difficulty</th>
-                <th className="px-4 py-3 text-right">Points</th>
+                <th className="px-4 py-3 text-right">Base Points</th>
                 <th className="px-4 py-3 text-center">Solves</th>
                 <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
@@ -484,7 +484,12 @@ export const AdminChallengesPage: React.FC = () => {
                       <DifficultyBadge difficulty={ch.difficulty} />
                     </td>
                     <td className="px-4 py-3 text-right font-bold text-cyan-400">
-                      {formatPoints(ch.current_points || ch.base_points)} PTS
+                      <div>{formatPoints(ch.base_points)} PTS</div>
+                      {ch.current_points !== undefined && ch.current_points !== ch.base_points && (
+                        <div className="text-[10px] text-amber-400 font-normal">
+                          ({formatPoints(ch.current_points)} dynamic)
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center text-slate-300">{ch.solves_count}</td>
                     <td className="px-4 py-3">
@@ -666,6 +671,7 @@ export const AdminChallengesPage: React.FC = () => {
                     }
                     className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100"
                   />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Authoritative starting value</span>
                 </div>
                 <div>
                   <label className="block text-slate-300 uppercase mb-1">Min Points (Dynamic)</label>
@@ -677,6 +683,7 @@ export const AdminChallengesPage: React.FC = () => {
                     }
                     className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100"
                   />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Dynamic decay floor</span>
                 </div>
                 <div>
                   <label className="block text-slate-300 uppercase mb-1">First Blood Bonus</label>
@@ -688,6 +695,7 @@ export const AdminChallengesPage: React.FC = () => {
                     }
                     className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100"
                   />
+                  <span className="text-[10px] text-slate-500 block mt-0.5">Bonus for 1st solve</span>
                 </div>
               </div>
 

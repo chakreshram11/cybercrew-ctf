@@ -2,10 +2,12 @@ import {
   Injectable,
   NotFoundException,
   ConflictException,
+  BadRequestException,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { ScoringService } from '../scoring/scoring.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { UpdateChallengeDto } from './dto/update-challenge.dto';
 import { DuplicateChallengeDto } from './dto/duplicate-challenge.dto';
@@ -15,7 +17,10 @@ import { AuthUser } from '../../common/decorators/current-user.decorator';
 export class ChallengesService {
   private readonly logger = new Logger(ChallengesService.name);
 
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private scoringService: ScoringService,
+  ) {}
 
   private generateSlug(name: string): string {
     return name
@@ -269,6 +274,10 @@ export class ChallengesService {
     const minimumPoints = dto.minimum_points ?? 100;
     const firstBlood = dto.first_blood_bonus ?? 50;
 
+    if (basePoints < minimumPoints) {
+      throw new BadRequestException('Base points must be greater than or equal to minimum points.');
+    }
+
     const { data: challenge, error } = await client
       .from('challenges')
       .insert({
@@ -339,6 +348,16 @@ export class ChallengesService {
   async updateChallenge(id: string, dto: UpdateChallengeDto, actor: AuthUser) {
     const client = this.supabaseService.getClient();
 
+    const { data: existing, error: findError } = await client
+      .from('challenges')
+      .select('id, base_points, current_points, minimum_points, solves_count')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (findError || !existing) {
+      throw new NotFoundException('Challenge scenario not found.');
+    }
+
     const updatePayload: any = {
       updated_at: new Date().toISOString(),
     };
@@ -349,9 +368,36 @@ export class ChallengesService {
     if (dto.description) updatePayload.description = dto.description;
     if (dto.difficulty) updatePayload.difficulty = dto.difficulty;
     if (dto.challenge_type) updatePayload.challenge_type = dto.challenge_type;
+
+    const newBasePoints = dto.base_points !== undefined ? dto.base_points : existing.base_points;
+    const newMinimumPoints = dto.minimum_points !== undefined ? dto.minimum_points : existing.minimum_points;
+
+    if (newBasePoints < newMinimumPoints) {
+      throw new BadRequestException('Base points must be greater than or equal to minimum points.');
+    }
+
     if (dto.base_points !== undefined) updatePayload.base_points = dto.base_points;
     if (dto.minimum_points !== undefined) updatePayload.minimum_points = dto.minimum_points;
     if (dto.first_blood_bonus !== undefined) updatePayload.first_blood_bonus = dto.first_blood_bonus;
+
+    // Recalculate current_points whenever points/challenge parameters are updated
+    const { data: settings } = await client
+      .from('competition_settings')
+      .select('dynamic_scoring_enabled')
+      .eq('id', 1)
+      .maybeSingle();
+
+    const isDynamicEnabled = settings?.dynamic_scoring_enabled ?? true;
+
+    const newCurrentPoints = this.scoringService.computePoints(
+      newBasePoints,
+      newMinimumPoints,
+      existing.solves_count || 0,
+      isDynamicEnabled,
+    );
+
+    updatePayload.current_points = newCurrentPoints;
+
     if (dto.status) {
       updatePayload.status = dto.status;
       updatePayload.is_published = dto.status === 'ACTIVE' || dto.status === 'PUBLISHED';

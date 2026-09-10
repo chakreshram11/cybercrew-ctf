@@ -189,7 +189,14 @@ export const ChallengeModal: React.FC<ChallengeModalProps> = ({
             <div className="flex items-center gap-2 mb-2">
               <CategoryBadge category={challenge.category?.name || challenge.challenge_type} />
               <DifficultyBadge difficulty={challenge.difficulty} />
-              <span className="font-mono text-xs font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30">
+              <span
+                title={
+                  challenge.current_points && challenge.current_points !== challenge.base_points
+                    ? `Current Value: ${challenge.current_points} PTS (Base: ${challenge.base_points} PTS)`
+                    : `Base Points: ${challenge.base_points} PTS`
+                }
+                className="font-mono text-xs font-bold text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30"
+              >
                 {formatPoints(challenge.current_points || challenge.base_points)} PTS
               </span>
               {challenge.first_blood_team && (
