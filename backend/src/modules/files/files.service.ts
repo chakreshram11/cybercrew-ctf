@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { SupabaseService } from '../supabase/supabase.service';
+import { CompetitionAccessService } from '../../common/services/competition-access.service';
 import { CreateFileDto } from './dto/create-file.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 
@@ -41,6 +42,7 @@ export class FilesService {
   constructor(
     private supabaseService: SupabaseService,
     private configService: ConfigService,
+    private competitionAccessService: CompetitionAccessService,
   ) {}
 
   /**
@@ -142,7 +144,9 @@ export class FilesService {
   /**
    * Retrieves all attachments for a challenge scenario.
    */
-  async listChallengeFiles(challengeId: string) {
+  async listChallengeFiles(challengeId: string, currentUser?: AuthUser) {
+    await this.competitionAccessService.validateParticipantAccess(currentUser);
+
     const client = this.supabaseService.getClient();
 
     const { data: files, error } = await client
@@ -161,6 +165,8 @@ export class FilesService {
    * Generates a secure, time-limited signed URL from Supabase Storage for downloading.
    */
   async getDownloadUrl(fileId: string, user?: AuthUser) {
+    await this.competitionAccessService.validateParticipantAccess(user);
+
     const client = this.supabaseService.getClient();
 
     const { data: file, error } = await client

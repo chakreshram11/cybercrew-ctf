@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
-import { Challenge, Category, TeamProgress } from '../../types';
+import { Challenge, Category, TeamProgress, CompetitionSettings } from '../../types';
 import { ChallengeCard } from '../../components/challenges/ChallengeCard';
 import { ChallengeModal } from '../../components/challenges/ChallengeModal';
-import { Flag, Search, Filter, Terminal, ShieldAlert, RotateCcw } from 'lucide-react';
+import { CountdownTimer } from '../../components/common/CountdownTimer';
+import { Flag, Search, Filter, Terminal, ShieldAlert, RotateCcw, Lock, Clock } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useRealtimeChallenges } from '../../hooks/useRealtimeChallenges';
 
@@ -17,6 +18,15 @@ export const ChallengesPage: React.FC = () => {
   const [solveStatusFilter, setSolveStatusFilter] = useState<'ALL' | 'SOLVED' | 'UNSOLVED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeChallenge, setActiveChallenge] = useState<Challenge | null>(null);
+
+  // Fetch Public Settings / Schedule
+  const { data: settingsData } = useQuery({
+    queryKey: ['public-settings'],
+    queryFn: async () => {
+      const res = await api.get<CompetitionSettings>('/settings/public');
+      return res.success && res.data ? res.data : null;
+    },
+  });
 
   // Fetch Categories
   const { data: categoriesData } = useQuery({
@@ -165,6 +175,61 @@ export const ChallengesPage: React.FC = () => {
         challenges: chals,
       });
     });
+  }
+
+  // Handle Competition Access & Lifecycle Window
+  const isAdmin =
+    user?.role === 'ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    user?.role === 'CHALLENGE_AUTHOR' ||
+    user?.role === 'MODERATOR';
+
+  const now = new Date();
+  const startDate = settingsData?.start_date ? new Date(settingsData.start_date) : null;
+  const endDate = settingsData?.end_date ? new Date(settingsData.end_date) : null;
+
+  const isBeforeStart = !isAdmin && !!startDate && now.getTime() < startDate.getTime();
+  const isAfterEnd =
+    !isAdmin &&
+    ((!!endDate && now.getTime() >= endDate.getTime()) ||
+      settingsData?.state === 'ENDED' ||
+      settingsData?.state === 'ARCHIVED');
+
+  if (isBeforeStart) {
+    return (
+      <div className="py-20 text-center rounded-2xl border border-cyan-500/30 bg-[#090e1c] p-8 max-w-2xl mx-auto space-y-6 font-mono">
+        <div className="w-16 h-16 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center mx-auto shadow-lg shadow-cyan-500/10">
+          <Lock className="w-8 h-8 text-cyan-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-mono font-bold text-white tracking-wider mb-2">CHALLENGES ARE LOCKED</h2>
+          <p className="text-xs font-mono text-slate-400 leading-relaxed">
+            Challenges will become available when the competition begins.
+          </p>
+        </div>
+        {settingsData?.start_date && (
+          <div className="pt-2">
+            <CountdownTimer targetDate={settingsData.start_date} label="COMPETITION STARTS IN" />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isAfterEnd) {
+    return (
+      <div className="py-20 text-center rounded-2xl border border-rose-500/30 bg-[#090e1c] p-8 max-w-2xl mx-auto space-y-6 font-mono">
+        <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center mx-auto shadow-lg shadow-rose-500/10">
+          <Clock className="w-8 h-8 text-rose-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-mono font-bold text-rose-300 tracking-wider mb-2">COMPETITION ENDED</h2>
+          <p className="text-xs font-mono text-slate-400 leading-relaxed">
+            Challenge access is no longer available.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   const handleResetFilters = () => {

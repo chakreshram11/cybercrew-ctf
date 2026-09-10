@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
+import { CompetitionAccessService } from '../../common/services/competition-access.service';
 import { CreateHintDto } from './dto/create-hint.dto';
 import { UpdateHintDto } from './dto/update-hint.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
@@ -15,13 +16,18 @@ import { AuthUser } from '../../common/decorators/current-user.decorator';
 export class HintsService {
   private readonly logger = new Logger(HintsService.name);
 
-  constructor(private supabaseService: SupabaseService) {}
+  constructor(
+    private supabaseService: SupabaseService,
+    private competitionAccessService: CompetitionAccessService,
+  ) {}
 
   /**
    * Retrieves participant-facing hints for a challenge scenario.
    * Content is strictly masked unless unlocked by operative team.
    */
   async listPublicHints(challengeId: string, currentUser?: AuthUser) {
+    await this.competitionAccessService.validateParticipantAccess(currentUser);
+
     const client = this.supabaseService.getClient();
 
     const { data: hints, error } = await client
@@ -87,6 +93,8 @@ export class HintsService {
    * and records HINT_PURCHASE in the immutable score ledger.
    */
   async unlockHint(challengeId: string, hintId: string, user: AuthUser) {
+    await this.competitionAccessService.validateParticipantAccess(user);
+
     const client = this.supabaseService.getClient();
 
     // 1. Verify operative is enrolled in an active squad

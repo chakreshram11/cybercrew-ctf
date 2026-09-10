@@ -26,8 +26,11 @@ export class FilesController {
   @Get('challenges/:challengeId/files')
   @Public()
   @ApiOperation({ summary: 'List downloadable file artifacts for challenge scenario' })
-  async listFiles(@Param('challengeId') challengeId: string) {
-    return this.filesService.listChallengeFiles(challengeId);
+  async listFiles(
+    @Param('challengeId') challengeId: string,
+    @CurrentUser() user?: AuthUser,
+  ) {
+    return this.filesService.listChallengeFiles(challengeId, user);
   }
 
   @Get('challenges/files/:fileId/download')

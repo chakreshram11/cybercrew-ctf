@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { ScoringService } from '../scoring/scoring.service';
+import { CompetitionAccessService } from '../../common/services/competition-access.service';
 import { SubmitFlagDto } from './dto/submit-flag.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 
@@ -20,6 +21,7 @@ export class SubmissionsService {
   constructor(
     private supabaseService: SupabaseService,
     private scoringService: ScoringService,
+    private competitionAccessService: CompetitionAccessService,
   ) {}
 
   /**
@@ -33,6 +35,8 @@ export class SubmissionsService {
     ip: string,
     userAgent: string,
   ) {
+    await this.competitionAccessService.validateParticipantAccess(user);
+
     const client = this.supabaseService.getClient();
 
     // 1. Verify operative is enrolled in an active squad

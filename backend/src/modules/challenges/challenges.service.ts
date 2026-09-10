@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { SupabaseService } from '../supabase/supabase.service';
 import { ScoringService } from '../scoring/scoring.service';
+import { CompetitionAccessService } from '../../common/services/competition-access.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { UpdateChallengeDto } from './dto/update-challenge.dto';
 import { DuplicateChallengeDto } from './dto/duplicate-challenge.dto';
@@ -20,6 +21,7 @@ export class ChallengesService {
   constructor(
     private supabaseService: SupabaseService,
     private scoringService: ScoringService,
+    private competitionAccessService: CompetitionAccessService,
   ) {}
 
   private generateSlug(name: string): string {
@@ -35,6 +37,8 @@ export class ChallengesService {
    * STRICT ZERO-TRUST: Never queries or returns flags or flag hashes.
    */
   async listPublicChallenges(currentUser?: AuthUser) {
+    await this.competitionAccessService.validateParticipantAccess(currentUser);
+
     const client = this.supabaseService.getClient();
 
     const { data: challenges, error } = await client
@@ -109,6 +113,8 @@ export class ChallengesService {
    * Includes hints with content masked unless unlocked by operative team.
    */
   async getPublicChallengeBySlug(slug: string, currentUser?: AuthUser) {
+    await this.competitionAccessService.validateParticipantAccess(currentUser);
+
     const client = this.supabaseService.getClient();
 
     const { data: challenge, error } = await client

@@ -16,6 +16,7 @@ import { RolesGuard } from './common/guards/roles.guard';
 
 // Core Modules
 import { SupabaseModule } from './modules/supabase/supabase.module';
+import { CompetitionAccessModule } from './common/services/competition-access.module';
 import { HealthModule } from './modules/health/health.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -54,6 +55,7 @@ import { AdminModule } from './modules/admin/admin.module';
 
     // Infrastructure & Services
     SupabaseModule,
+    CompetitionAccessModule,
     HealthModule,
     AuthModule,
     UsersModule,
