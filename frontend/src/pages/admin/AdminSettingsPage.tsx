@@ -3,13 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { CompetitionSettings } from '../../types';
 import { Settings, Save, CheckCircle2, AlertCircle, Terminal, Shield } from 'lucide-react';
-import { parseIsoToUtcDateAndTime, combineUtcDateAndTimeToIso } from '../../lib/utils';
+import { parseIsoToIstDateAndTime, combineIstDateAndTimeToIso } from '../../lib/utils';
 
 export const AdminSettingsPage: React.FC = () => {
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // UTC Date & Time field state
+  // IST Date & Time field state
   const [startDate, setStartDate] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -22,9 +22,9 @@ export const AdminSettingsPage: React.FC = () => {
       const fallback: CompetitionSettings = {
         ctf_name: 'Cyber Crew CTF 2026',
         description: 'Official Capture The Flag Competition Platform for Cyber Crew Club.',
-        start_date: '2026-09-10T09:00:00Z',
-        end_date: '2026-09-15T17:00:00Z',
-        timezone: 'UTC',
+        start_date: '2026-09-10T03:30:00.000Z', // 09:00 AM IST
+        end_date: '2026-09-15T11:30:00.000Z',   // 05:00 PM IST
+        timezone: 'Asia/Kolkata',
         state: 'LIVE',
         registration_open: true,
         max_team_size: 4,
@@ -45,8 +45,8 @@ export const AdminSettingsPage: React.FC = () => {
   React.useEffect(() => {
     if (settingsData && !settings) {
       setSettings(settingsData);
-      const startParsed = parseIsoToUtcDateAndTime(settingsData.start_date);
-      const endParsed = parseIsoToUtcDateAndTime(settingsData.end_date);
+      const startParsed = parseIsoToIstDateAndTime(settingsData.start_date);
+      const endParsed = parseIsoToIstDateAndTime(settingsData.end_date);
       setStartDate(startParsed.date || '2026-09-10');
       setStartTime(startParsed.time || '09:00');
       setEndDate(endParsed.date || '2026-09-15');
@@ -82,26 +82,26 @@ export const AdminSettingsPage: React.FC = () => {
       return;
     }
 
-    const isoStart = combineUtcDateAndTimeToIso(startDate, startTime);
-    const isoEnd = combineUtcDateAndTimeToIso(endDate, endTime);
+    const isoStart = combineIstDateAndTimeToIso(startDate, startTime);
+    const isoEnd = combineIstDateAndTimeToIso(endDate, endTime);
 
     const startTimeMs = new Date(isoStart).getTime();
     const endTimeMs = new Date(isoEnd).getTime();
 
     if (isNaN(startTimeMs)) {
-      setStatusMsg({ type: 'error', text: 'Invalid Start UTC date or time format.' });
+      setStatusMsg({ type: 'error', text: 'Invalid Start IST date or time format.' });
       setSaving(false);
       return;
     }
 
     if (isNaN(endTimeMs)) {
-      setStatusMsg({ type: 'error', text: 'Invalid End UTC date or time format.' });
+      setStatusMsg({ type: 'error', text: 'Invalid End IST date or time format.' });
       setSaving(false);
       return;
     }
 
     if (startTimeMs >= endTimeMs) {
-      setStatusMsg({ type: 'error', text: 'Start date/time must be before the end date/time.' });
+      setStatusMsg({ type: 'error', text: 'Start date/time must be before end date/time.' });
       setSaving(false);
       return;
     }
@@ -112,7 +112,7 @@ export const AdminSettingsPage: React.FC = () => {
       description: settings.description,
       start_date: isoStart,
       end_date: isoEnd,
-      timezone: settings.timezone || 'UTC',
+      timezone: 'Asia/Kolkata',
       state: settings.state,
       registration_open: settings.registration_open,
       max_team_size: settings.max_team_size,
@@ -160,7 +160,7 @@ export const AdminSettingsPage: React.FC = () => {
             COMPETITION & PLATFORM PARAMETERS
           </h2>
           <p className="text-xs font-mono text-slate-400 mt-0.5">
-            CONSTRAINTS, SCORING POLICIES, EVENT TIMELINES, AND RATE GOVERNANCE
+            CONSTRAINTS, SCORING POLICIES, EVENT TIMELINES, AND RATE GOVERNANCE (IST)
           </p>
         </div>
       </div>
@@ -233,17 +233,17 @@ export const AdminSettingsPage: React.FC = () => {
         {/* Schedule & Team Size Rules */}
         <div className="p-6 rounded-xl bg-[#090e1c] border border-slate-800 space-y-4">
           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            Timelines & Roster Bounds
+            Timelines & Roster Bounds (India Standard Time - IST / Asia/Kolkata)
           </h3>
 
           {/* Start Date & Time */}
           <div className="space-y-2">
             <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider block">
-              START BOUNDARY (UTC)
+              START BOUNDARY (IST)
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-300 uppercase mb-1">Start Date (UTC)</label>
+                <label className="block text-slate-300 uppercase mb-1">Start Date (IST)</label>
                 <input
                   type="date"
                   required
@@ -253,7 +253,7 @@ export const AdminSettingsPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-slate-300 uppercase mb-1">Start Time (UTC)</label>
+                <label className="block text-slate-300 uppercase mb-1">Start Time (IST)</label>
                 <input
                   type="time"
                   required
@@ -268,11 +268,11 @@ export const AdminSettingsPage: React.FC = () => {
           {/* End Date & Time */}
           <div className="space-y-2 pt-2">
             <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider block">
-              END BOUNDARY (UTC)
+              END BOUNDARY (IST)
             </span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-slate-300 uppercase mb-1">End Date (UTC)</label>
+                <label className="block text-slate-300 uppercase mb-1">End Date (IST)</label>
                 <input
                   type="date"
                   required
@@ -282,7 +282,7 @@ export const AdminSettingsPage: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-slate-300 uppercase mb-1">End Time (UTC)</label>
+                <label className="block text-slate-300 uppercase mb-1">End Time (IST)</label>
                 <input
                   type="time"
                   required

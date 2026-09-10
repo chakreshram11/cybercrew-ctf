@@ -40,6 +40,49 @@ export function formatTimeRemaining(targetDate: string): {
   return { days, hours, minutes, seconds, isExpired: false };
 }
 
+export function parseIsoToIstDateAndTime(isoString?: string | null): { date: string; time: string } {
+  if (!isoString) return { date: '', time: '' };
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return { date: '', time: '' };
+    const dateParts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d);
+    const timeParts = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
+    return {
+      date: dateParts,
+      time: timeParts,
+    };
+  } catch {
+    return { date: '', time: '' };
+  }
+}
+
+export function combineIstDateAndTimeToIso(dateStr: string, timeStr: string): string {
+  if (!dateStr || !timeStr) return '';
+  const cleanDate = dateStr.trim();
+  let cleanTime = timeStr.trim();
+  if (/^\d{1,2}:\d{2}$/.test(cleanTime)) {
+    const [h, m] = cleanTime.split(':');
+    cleanTime = `${h.padStart(2, '0')}:${m}:00`;
+  } else if (/^\d{1,2}:\d{2}:\d{2}$/.test(cleanTime)) {
+    const [h, m, s] = cleanTime.split(':');
+    cleanTime = `${h.padStart(2, '0')}:${m}:${s}`;
+  }
+  const istIsoString = `${cleanDate}T${cleanTime}+05:30`;
+  const d = new Date(istIsoString);
+  if (isNaN(d.getTime())) return '';
+  return d.toISOString();
+}
+
 export function parseIsoToUtcDateAndTime(isoString?: string | null): { date: string; time: string } {
   if (!isoString) return { date: '', time: '' };
   try {

@@ -1,13 +1,37 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Shield, Flag, Terminal, Trophy, Users, Zap, Lock, ArrowRight } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Shield, Flag, Terminal, Trophy, Users, Zap, Lock, ArrowRight, Clock } from 'lucide-react';
 import { CountdownTimer } from '../components/common/CountdownTimer';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
 
 export const LandingPage: React.FC = () => {
   const { user } = useAuth();
-  // Target event date placeholder or upcoming competition date
-  const eventTargetDate = '2026-10-15T09:00:00Z';
+
+  const { data: publicSettings, isLoading: isSettingsLoading, isError: isSettingsError } = useQuery({
+    queryKey: ['public-settings'],
+    queryFn: async () => {
+      const res = await api.get<{
+        ctf_name: string;
+        description: string;
+        start_date: string;
+        end_date: string;
+        timezone: string;
+        state: string;
+        registration_open: boolean;
+        scoreboard_frozen: boolean;
+      }>('/settings/public');
+      return res.success && res.data ? res.data : null;
+    },
+    staleTime: 10000,
+  });
+
+  const eventStartDate = publicSettings?.start_date;
+  const eventEndDate = publicSettings?.end_date;
+  const eventState = publicSettings?.state;
+
+  const isEnded = eventState === 'ENDED' || (eventEndDate && Date.parse(eventEndDate) <= Date.now());
 
   return (
     <div className="space-y-24 py-6">
@@ -15,7 +39,7 @@ export const LandingPage: React.FC = () => {
       <section className="text-center relative pt-8 pb-12">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-xs font-mono font-semibold tracking-wider uppercase mb-8 cyber-glow">
           <Zap className="w-3.5 h-3.5" />
-          <span>CYBER CREW CLUB OFFICIAL COMPETITION</span>
+          <span>{publicSettings?.ctf_name || 'CYBER CREW CLUB OFFICIAL COMPETITION'}</span>
         </div>
 
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold font-mono tracking-tight text-white mb-6">
@@ -23,7 +47,7 @@ export const LandingPage: React.FC = () => {
         </h1>
 
         <p className="max-w-2xl mx-auto text-lg text-slate-400 font-sans leading-relaxed mb-10">
-          Welcome to <span className="text-slate-200 font-semibold font-mono">Cyber Crew CTF 2026</span>. Test your offensive cybersecurity acumen, reverse engineering dexterity, and cryptographic resilience against real-world challenge scenarios.
+          Welcome to <span className="text-slate-200 font-semibold font-mono">{publicSettings?.ctf_name || 'Cyber Crew CTF 2026'}</span>. Test your offensive cybersecurity acumen, reverse engineering dexterity, and cryptographic resilience against real-world challenge scenarios.
         </p>
 
         {/* Action Buttons */}
@@ -62,7 +86,24 @@ export const LandingPage: React.FC = () => {
 
         {/* Countdown Box */}
         <div className="inline-block p-6 rounded-2xl bg-slate-900/70 border border-slate-800 backdrop-blur-md shadow-2xl">
-          <CountdownTimer targetDate={eventTargetDate} label="COMPETITION COMMENCEMENT IN" />
+          {isSettingsLoading ? (
+            <div className="flex items-center justify-center gap-2 font-mono text-xs text-cyan-400 py-2">
+              <Clock className="w-4 h-4 animate-spin" />
+              <span>LOADING EVENT SCHEDULE...</span>
+            </div>
+          ) : isSettingsError || !eventStartDate ? (
+            <div className="flex items-center justify-center gap-2 font-mono text-xs text-slate-400 py-2">
+              <Clock className="w-4 h-4 text-slate-500" />
+              <span>EVENT SCHEDULE UNAVAILABLE</span>
+            </div>
+          ) : isEnded ? (
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 font-mono text-sm">
+              <Clock className="w-4 h-4 text-rose-400" />
+              <span className="font-bold tracking-wider uppercase">COMPETITION ENDED</span>
+            </div>
+          ) : (
+            <CountdownTimer targetDate={eventStartDate} label="COMPETITION COMMENCEMENT IN" />
+          )}
         </div>
       </section>
 
