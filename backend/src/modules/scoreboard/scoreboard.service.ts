@@ -20,7 +20,7 @@ export class ScoreboardService {
   constructor(private supabaseService: SupabaseService) {}
 
   /**
-   * Generates live scoreboard ranking derived from the verified team balances and solve logs.
+   * Generates live scoreboard ranking derived from verified team balances and solve logs.
    * Enforces freeze_time when scoreboard_frozen is true for non-administrators.
    */
   async getScoreboard(currentUser?: AuthUser): Promise<ScoreboardEntry[]> {
@@ -39,14 +39,11 @@ export class ScoreboardService {
     const isFrozen = settings?.scoreboard_frozen && !isAdmin;
     const freezeTime = settings?.freeze_time;
 
-    // Fetch teams ordered by score DESC, updated_at ASC
-    let teamsQuery = client
+    // Fetch teams
+    const { data: teams, error: teamsError } = await client
       .from('teams')
-      .select('id, name, slug, score, updated_at')
-      .order('score', { ascending: false })
-      .order('updated_at', { ascending: true });
+      .select('id, name, slug, score, updated_at');
 
-    const { data: teams, error: teamsError } = await teamsQuery;
     if (teamsError) {
       throw new InternalServerErrorException('Failed to retrieve squads for scoreboard.');
     }
@@ -55,7 +52,7 @@ export class ScoreboardService {
       return [];
     }
 
-    // Fetch solves to calculate solve counts and last_solve_at
+    // Fetch solves to calculate solve counts, first bloods, and last_solve_at
     let solvesQuery = client
       .from('solves')
       .select('team_id, is_first_blood, solved_at')
@@ -92,9 +89,8 @@ export class ScoreboardService {
       }
     }
 
-    // Compile scoreboard ranking entries
-    const entries: ScoreboardEntry[] = teams.map((team, index) => ({
-      rank: index + 1,
+    // Compile unranked scoreboard entries
+    const unrankedEntries = teams.map((team) => ({
       team_id: team.id,
       team_name: team.name,
       team_slug: team.slug,
@@ -103,6 +99,48 @@ export class ScoreboardService {
       first_bloods_count: firstBloodCountMap.get(team.id) || 0,
       last_solve_at: lastSolveMap.get(team.id) || null,
     }));
+
+    // Sort entries using official CTF ranking & tie-breaker rules:
+    // 1. score DESC (Primary)
+    // 2. solves_count DESC (Secondary)
+    // 3. last_solve_at ASC (Tertiary: earlier solve timestamp ranks higher)
+    // 4. team_name ASC (Quaternary: deterministic fallback)
+    unrankedEntries.sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      if (b.solves_count !== a.solves_count) return b.solves_count - a.solves_count;
+
+      if (a.last_solve_at && b.last_solve_at) {
+        const timeDiff = new Date(a.last_solve_at).getTime() - new Date(b.last_solve_at).getTime();
+        if (timeDiff !== 0) return timeDiff;
+      } else if (a.last_solve_at && !b.last_solve_at) {
+        return -1;
+      } else if (!a.last_solve_at && b.last_solve_at) {
+        return 1;
+      }
+
+      return a.team_name.localeCompare(b.team_name);
+    });
+
+    // Assign ranks with proper tie detection
+    let currentRank = 1;
+    const entries: ScoreboardEntry[] = unrankedEntries.map((curr, index) => {
+      if (index > 0) {
+        const prev = unrankedEntries[index - 1];
+        const isTied =
+          curr.score === prev.score &&
+          curr.solves_count === prev.solves_count &&
+          curr.last_solve_at === prev.last_solve_at;
+
+        if (!isTied) {
+          currentRank = index + 1;
+        }
+      }
+
+      return {
+        rank: currentRank,
+        ...curr,
+      };
+    });
 
     return entries;
   }

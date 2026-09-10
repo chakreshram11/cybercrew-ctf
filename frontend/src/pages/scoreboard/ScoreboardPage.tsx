@@ -19,7 +19,7 @@ export const ScoreboardPage: React.FC = () => {
       const res = await api.get<ScoreboardEntry[]>('/scoreboard');
       return res.success && res.data ? res.data : [];
     },
-    refetchInterval: 15000, // Real-time poll every 15 seconds
+    refetchInterval: 15000, // Real-time poll fallback every 15 seconds
   });
 
   const entries = scoreboard || [];
@@ -27,29 +27,31 @@ export const ScoreboardPage: React.FC = () => {
     e.team_name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const getRankBadge = (rank: number) => {
-    if (rank === 1) {
+  const hasScoredLeader = entries.some((e) => e.score > 0 || e.solves_count > 0);
+
+  const getRankBadge = (entry: ScoreboardEntry) => {
+    if (entry.rank === 1 && hasScoredLeader) {
       return (
         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/40">
           <Crown className="w-4 h-4" />
         </span>
       );
     }
-    if (rank === 2) {
+    if (entry.rank === 2 && hasScoredLeader) {
       return (
         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-slate-300/20 text-slate-300 border border-slate-300/40">
           <Medal className="w-4 h-4" />
         </span>
       );
     }
-    if (rank === 3) {
+    if (entry.rank === 3 && hasScoredLeader) {
       return (
         <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-700/20 text-amber-600 border border-amber-700/40">
           <Medal className="w-4 h-4" />
         </span>
       );
     }
-    return <span className="font-mono text-slate-400 font-semibold text-sm">#{rank}</span>;
+    return <span className="font-mono text-slate-400 font-semibold text-sm">#{entry.rank}</span>;
   };
 
   return (
@@ -85,15 +87,37 @@ export const ScoreboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Top 3 Podium Cards */}
-      {!isLoading && entries.length >= 3 && !search && (
+      {/* Neutral Zero-Score State (When all teams have 0 PTS / 0 solves) */}
+      {!isLoading && entries.length > 0 && !hasScoredLeader && !search && (
+        <div className="p-6 rounded-2xl bg-[#090e1c] border border-slate-800 text-center space-y-3 shadow-xl">
+          <div className="w-12 h-12 rounded-full bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 mx-auto">
+            <Trophy className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-lg font-mono font-bold text-white tracking-wide">LEADERBOARD OPEN</h3>
+            <p className="text-xs font-mono text-slate-400 mt-1">
+              No scored leader yet. Solve challenges to claim top podium positions!
+            </p>
+          </div>
+          <div className="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-slate-900 border border-slate-800 font-mono text-xs text-slate-400">
+            <span>{entries.length} SQUADS REGISTERED</span>
+            <span>•</span>
+            <span>0 PTS TOP SCORE</span>
+          </div>
+        </div>
+      )}
+
+      {/* Top 3 Podium Cards (Rendered only when at least one team has scored) */}
+      {!isLoading && entries.length >= 3 && hasScoredLeader && !search && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4">
           {/* 2nd Place */}
           <div className="p-5 rounded-xl bg-[#090e1c] border border-slate-700 flex flex-col items-center text-center relative order-2 md:order-1">
             <div className="w-10 h-10 rounded-full bg-slate-300/10 border border-slate-300/30 flex items-center justify-center text-slate-300 mb-2">
               <Medal className="w-5 h-5" />
             </div>
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">2ND PLACE</span>
+            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
+              {entries[1].rank === entries[0].rank ? '2ND PLACE (TIED 1ST)' : '2ND PLACE'}
+            </span>
             <Link
               to={`/teams/${entries[1].team_slug}`}
               className="text-base font-mono font-bold text-white hover:text-cyan-400 mt-1"
@@ -114,7 +138,7 @@ export const ScoreboardPage: React.FC = () => {
               <Crown className="w-6 h-6" />
             </div>
             <span className="text-xs font-mono text-amber-400 uppercase tracking-widest font-bold">
-              👑 1ST PLACE CHAMPION
+              {entries[0].rank === entries[1].rank ? '👑 1ST PLACE (TIED)' : '👑 1ST PLACE CHAMPION'}
             </span>
             <Link
               to={`/teams/${entries[0].team_slug}`}
@@ -141,7 +165,9 @@ export const ScoreboardPage: React.FC = () => {
             <div className="w-10 h-10 rounded-full bg-amber-700/10 border border-amber-700/30 flex items-center justify-center text-amber-600 mb-2">
               <Medal className="w-5 h-5" />
             </div>
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">3RD PLACE</span>
+            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">
+              {entries[2].rank === entries[1].rank ? '3RD PLACE (TIED)' : '3RD PLACE'}
+            </span>
             <Link
               to={`/teams/${entries[2].team_slug}`}
               className="text-base font-mono font-bold text-white hover:text-cyan-400 mt-1"
@@ -196,7 +222,7 @@ export const ScoreboardPage: React.FC = () => {
                         isUserTeam ? 'bg-cyan-500/5 border-l-2 border-cyan-400' : ''
                       }`}
                     >
-                      <td className="px-6 py-4 text-center">{getRankBadge(entry.rank)}</td>
+                      <td className="px-6 py-4 text-center">{getRankBadge(entry)}</td>
                       <td className="px-6 py-4 font-semibold text-slate-100">
                         <Link
                           to={`/teams/${entry.team_slug}`}
