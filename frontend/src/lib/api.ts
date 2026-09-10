@@ -57,12 +57,24 @@ class ApiClient {
       const data = await response.json();
 
       if (!response.ok) {
+        let rawMsg = data.error?.message || data.message || 'An unexpected error occurred.';
+        if (Array.isArray(rawMsg)) {
+          rawMsg = `Validation failed: ${rawMsg.join(' | ')}`;
+        } else if (typeof rawMsg === 'object' && rawMsg !== null) {
+          rawMsg = JSON.stringify(rawMsg);
+        }
+
         return {
           success: false,
-          error: data.error || {
-            code: `HTTP_${response.status}`,
-            message: data.message || 'An unexpected error occurred.',
-          },
+          error: data.error
+            ? {
+                ...data.error,
+                message: typeof data.error.message === 'string' ? data.error.message : rawMsg,
+              }
+            : {
+                code: `HTTP_${response.status}`,
+                message: rawMsg,
+              },
         };
       }
 

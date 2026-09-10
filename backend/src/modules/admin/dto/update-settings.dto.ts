@@ -6,6 +6,7 @@ import {
   Min,
   Max,
   IsEnum,
+  IsISO8601,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -30,12 +31,12 @@ export class UpdateSettingsDto {
 
   @ApiPropertyOptional({ description: 'Event start timestamp (UTC)', example: '2026-10-15T09:00:00Z' })
   @IsOptional()
-  @IsString()
+  @IsISO8601()
   start_date?: string;
 
   @ApiPropertyOptional({ description: 'Event end timestamp (UTC)', example: '2026-10-17T21:00:00Z' })
   @IsOptional()
-  @IsString()
+  @IsISO8601()
   end_date?: string;
 
   @ApiPropertyOptional({ description: 'Competition timezone', example: 'UTC' })
@@ -96,7 +97,7 @@ export class UpdateSettingsDto {
 
   @ApiPropertyOptional({ description: 'Timestamp at which scores freeze', example: '2026-10-17T18:00:00Z' })
   @IsOptional()
-  @IsString()
+  @IsISO8601()
   freeze_time?: string;
 
   @ApiPropertyOptional({ description: 'Submission rate limit attempts per minute', example: 10 })

@@ -250,4 +250,5 @@ export interface CompetitionSettings {
   scoreboard_frozen: boolean;
   freeze_time?: string | null;
   submission_rate_limit: number;
+  maintenance_mode?: boolean;
 }

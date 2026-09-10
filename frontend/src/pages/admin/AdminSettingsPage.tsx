@@ -3,10 +3,17 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { CompetitionSettings } from '../../types';
 import { Settings, Save, CheckCircle2, AlertCircle, Terminal, Shield } from 'lucide-react';
+import { parseIsoToUtcDateAndTime, combineUtcDateAndTimeToIso } from '../../lib/utils';
 
 export const AdminSettingsPage: React.FC = () => {
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // UTC Date & Time field state
+  const [startDate, setStartDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [endTime, setEndTime] = useState('');
 
   const { data: settingsData, isLoading, refetch } = useQuery({
     queryKey: ['admin-settings'],
@@ -15,8 +22,8 @@ export const AdminSettingsPage: React.FC = () => {
       const fallback: CompetitionSettings = {
         ctf_name: 'Cyber Crew CTF 2026',
         description: 'Official Capture The Flag Competition Platform for Cyber Crew Club.',
-        start_date: '2026-10-15T09:00:00Z',
-        end_date: '2026-10-17T21:00:00Z',
+        start_date: '2026-09-10T09:00:00Z',
+        end_date: '2026-09-15T17:00:00Z',
         timezone: 'UTC',
         state: 'LIVE',
         registration_open: true,
@@ -38,6 +45,12 @@ export const AdminSettingsPage: React.FC = () => {
   React.useEffect(() => {
     if (settingsData && !settings) {
       setSettings(settingsData);
+      const startParsed = parseIsoToUtcDateAndTime(settingsData.start_date);
+      const endParsed = parseIsoToUtcDateAndTime(settingsData.end_date);
+      setStartDate(startParsed.date || '2026-09-10');
+      setStartTime(startParsed.time || '09:00');
+      setEndDate(endParsed.date || '2026-09-15');
+      setEndTime(endParsed.time || '17:00');
     }
   }, [settingsData, settings]);
 
@@ -47,8 +60,75 @@ export const AdminSettingsPage: React.FC = () => {
     setSaving(true);
     setStatusMsg(null);
 
+    // Client-side Date & Time Validation
+    if (!startDate) {
+      setStatusMsg({ type: 'error', text: 'Start date is required.' });
+      setSaving(false);
+      return;
+    }
+    if (!startTime) {
+      setStatusMsg({ type: 'error', text: 'Start time is required.' });
+      setSaving(false);
+      return;
+    }
+    if (!endDate) {
+      setStatusMsg({ type: 'error', text: 'End date is required.' });
+      setSaving(false);
+      return;
+    }
+    if (!endTime) {
+      setStatusMsg({ type: 'error', text: 'End time is required.' });
+      setSaving(false);
+      return;
+    }
+
+    const isoStart = combineUtcDateAndTimeToIso(startDate, startTime);
+    const isoEnd = combineUtcDateAndTimeToIso(endDate, endTime);
+
+    const startTimeMs = new Date(isoStart).getTime();
+    const endTimeMs = new Date(isoEnd).getTime();
+
+    if (isNaN(startTimeMs)) {
+      setStatusMsg({ type: 'error', text: 'Invalid Start UTC date or time format.' });
+      setSaving(false);
+      return;
+    }
+
+    if (isNaN(endTimeMs)) {
+      setStatusMsg({ type: 'error', text: 'Invalid End UTC date or time format.' });
+      setSaving(false);
+      return;
+    }
+
+    if (startTimeMs >= endTimeMs) {
+      setStatusMsg({ type: 'error', text: 'Start date/time must be before the end date/time.' });
+      setSaving(false);
+      return;
+    }
+
+    // Explicitly construct payload with ONLY Whitelisted DTO fields (excluding id, logo_url, updated_at)
+    const payload = {
+      ctf_name: settings.ctf_name,
+      description: settings.description,
+      start_date: isoStart,
+      end_date: isoEnd,
+      timezone: settings.timezone || 'UTC',
+      state: settings.state,
+      registration_open: settings.registration_open,
+      max_team_size: settings.max_team_size,
+      min_team_size: settings.min_team_size,
+      allow_negative_scores: settings.allow_negative_scores,
+      dynamic_scoring_enabled: settings.dynamic_scoring_enabled,
+      first_blood_enabled: settings.first_blood_enabled,
+      hints_enabled: settings.hints_enabled,
+      scoreboard_frozen: settings.scoreboard_frozen,
+      freeze_time: settings.freeze_time || undefined,
+      submission_rate_limit: settings.submission_rate_limit,
+      maintenance_mode: settings.maintenance_mode || false,
+    };
+
     try {
-      const res = await api.patch('/admin/settings', settings);
+      const res = await api.patch('/admin/settings', payload);
       if (res.success) {
         setStatusMsg({ type: 'success', text: 'Competition settings successfully applied.' });
         refetch();
@@ -156,30 +236,65 @@ export const AdminSettingsPage: React.FC = () => {
             Timelines & Roster Bounds
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-slate-300 uppercase mb-1">Start Date (UTC)</label>
-              <input
-                type="text"
-                value={settings.start_date}
-                onChange={(e) => setSettings({ ...settings, start_date: e.target.value })}
-                placeholder="2026-10-15T09:00:00Z"
-                className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100"
-              />
-            </div>
-            <div>
-              <label className="block text-slate-300 uppercase mb-1">End Date (UTC)</label>
-              <input
-                type="text"
-                value={settings.end_date}
-                onChange={(e) => setSettings({ ...settings, end_date: e.target.value })}
-                placeholder="2026-10-17T21:00:00Z"
-                className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100"
-              />
+          {/* Start Date & Time */}
+          <div className="space-y-2">
+            <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider block">
+              START BOUNDARY (UTC)
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 uppercase mb-1">Start Date (UTC)</label>
+                <input
+                  type="date"
+                  required
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-300 uppercase mb-1">Start Time (UTC)</label>
+                <input
+                  type="time"
+                  required
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* End Date & Time */}
+          <div className="space-y-2 pt-2">
+            <span className="text-xs font-bold text-cyan-400 uppercase tracking-wider block">
+              END BOUNDARY (UTC)
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-slate-300 uppercase mb-1">End Date (UTC)</label>
+                <input
+                  type="date"
+                  required
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+              <div>
+                <label className="block text-slate-300 uppercase mb-1">End Time (UTC)</label>
+                <input
+                  type="time"
+                  required
+                  value={endTime}
+                  onChange={(e) => setEndTime(e.target.value)}
+                  className="w-full px-3 py-2 rounded bg-slate-900 border border-slate-700 text-slate-100 focus:outline-none focus:border-cyan-400"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
             <div>
               <label className="block text-slate-300 uppercase mb-1">Max Squad Size</label>
               <input
