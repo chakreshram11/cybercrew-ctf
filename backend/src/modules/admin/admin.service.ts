@@ -242,4 +242,77 @@ export class AdminService {
     this.logger.log(`Competition policies updated by [${actor.username}] - State: ${updated.state}`);
     return updated;
   }
+
+  /**
+   * Performs an atomic reset of competition progress and scoring ledger.
+   * Clears score events, solves, submissions, hint unlocks, resets team scores to 0,
+   * resets challenge solve counts to 0, and restores dynamic points to base_points.
+   */
+  async resetCompetition(actor: AuthUser) {
+    const client = this.supabaseService.getClient();
+
+    try {
+      // 1. Delete all score events
+      const { error: scoreEventsErr } = await client.from('score_events').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (scoreEventsErr) throw scoreEventsErr;
+
+      // 2. Delete all solves
+      const { error: solvesErr } = await client.from('solves').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (solvesErr) throw solvesErr;
+
+      // 3. Delete all submissions
+      const { error: submissionsErr } = await client.from('submissions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (submissionsErr) throw submissionsErr;
+
+      // 4. Delete all hint unlocks
+      const { error: hintUnlocksErr } = await client.from('hint_unlocks').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+      if (hintUnlocksErr) throw hintUnlocksErr;
+
+      // 5. Reset all team scores to zero
+      const { error: teamsErr } = await client
+        .from('teams')
+        .update({ score: 0, updated_at: new Date().toISOString() })
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+      if (teamsErr) throw teamsErr;
+
+      // 6. Reset challenge solve counts and restore current_points to base_points
+      const { data: challenges } = await client.from('challenges').select('id, base_points');
+      if (challenges && challenges.length > 0) {
+        for (const ch of challenges) {
+          await client
+            .from('challenges')
+            .update({
+              solves_count: 0,
+              current_points: ch.base_points,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', ch.id);
+        }
+      }
+
+      // Reset in-memory cached stats
+      this.cachedStats = null;
+
+      // 7. Write audit log
+      await client.from('audit_logs').insert({
+        actor_id: actor.id,
+        action: 'COMPETITION_SCORE_RESET',
+        resource_type: 'COMPETITION',
+        resource_id: '1',
+        metadata: {
+          description: 'Competition scoring and challenge progress reset by administrator.',
+        },
+      });
+
+      this.logger.log(`Competition scoring and progress reset by admin [${actor.username}]`);
+
+      return {
+        success: true,
+        message: 'Competition scoring and progress reset successfully.',
+      };
+    } catch (err: any) {
+      this.logger.error(`Competition reset failed: ${err.message}`);
+      throw new InternalServerErrorException(`Failed to reset competition state: ${err.message}`);
+    }
+  }
 }

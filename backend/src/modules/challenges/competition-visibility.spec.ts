@@ -44,6 +44,7 @@ describe('Comprehensive Competition Visibility & Authorization Matrix (18 Tests)
     minimum_points: 100,
     is_published: true,
     is_active: true,
+    is_visible: true,
     hints: [],
   };
 

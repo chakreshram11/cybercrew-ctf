@@ -76,6 +76,7 @@ export class SubmissionsService {
         first_blood_bonus,
         is_published,
         is_active,
+        is_visible,
         max_attempts,
         submission_cooldown_seconds
       `)
@@ -86,7 +87,8 @@ export class SubmissionsService {
       throw new NotFoundException('Challenge scenario not found.');
     }
 
-    if ((!challenge.is_published || !challenge.is_active) && !isAdmin) {
+    const isHidden = challenge.is_visible === false;
+    if ((!challenge.is_published || !challenge.is_active || isHidden) && !isAdmin) {
       throw new ForbiddenException('This challenge is not currently accepting submissions.');
     }
 

@@ -137,6 +137,11 @@ export class CreateChallengeDto {
   @IsEnum(['DRAFT', 'IN_REVIEW', 'APPROVED', 'PUBLISHED', 'ACTIVE', 'DISABLED', 'ARCHIVED'])
   status?: ChallengeStatus;
 
+  @ApiPropertyOptional({ description: 'Visibility flag for participants', default: true, example: true })
+  @IsOptional()
+  @IsBoolean()
+  is_visible?: boolean;
+
   @ApiPropertyOptional({ description: 'Live Target URL', example: 'https://web01.ctf.cybercrew.online' })
   @IsOptional()
   @IsString()

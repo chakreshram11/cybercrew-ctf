@@ -16,6 +16,8 @@ import {
   Download,
   X,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { formatPoints } from '../../lib/utils';
 import { supabase } from '../../lib/supabase';
@@ -49,6 +51,10 @@ export const AdminChallengesPage: React.FC = () => {
   const [search, setSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editingChallenge, setEditingChallenge] = useState<Challenge | null>(null);
+
+  // Visibility toggle modal state
+  const [visibilityModalTarget, setVisibilityModalTarget] = useState<Challenge | null>(null);
+  const [togglingVisibility, setTogglingVisibility] = useState(false);
 
   // Form State for Create/Edit
   const [formData, setFormData] = useState<{
@@ -404,6 +410,28 @@ export const AdminChallengesPage: React.FC = () => {
     }
   };
 
+  const handleConfirmToggleVisibility = async () => {
+    if (!visibilityModalTarget) return;
+    setTogglingVisibility(true);
+    const newVisibility = !visibilityModalTarget.is_visible;
+    try {
+      const res = await api.patch(`/admin/challenges/${visibilityModalTarget.id}/visibility`, {
+        is_visible: newVisibility,
+      });
+      if (res.success) {
+        refetch();
+        invalidateAllQueries();
+      } else {
+        alert(res.error?.message || 'Failed to update challenge visibility.');
+      }
+    } catch {
+      alert('Network error while toggling visibility.');
+    } finally {
+      setTogglingVisibility(false);
+      setVisibilityModalTarget(null);
+    }
+  };
+
   return (
     <div className="space-y-6 font-sans">
       {/* Header */}
@@ -451,20 +479,21 @@ export const AdminChallengesPage: React.FC = () => {
                 <th className="px-4 py-3 text-right">Base Points</th>
                 <th className="px-4 py-3 text-center">Solves</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Visibility</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {isLoading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-cyan-400">
+                  <td colSpan={8} className="px-4 py-12 text-center text-cyan-400">
                     <Terminal className="w-4 h-4 animate-spin inline mr-2" />
                     LOADING CHALLENGE INVENTORY...
                   </td>
                 </tr>
               ) : filteredChallenges.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
                     No challenges in inventory.
                   </td>
                 </tr>
@@ -495,8 +524,32 @@ export const AdminChallengesPage: React.FC = () => {
                     <td className="px-4 py-3">
                       <StatusBadge status={ch.status} />
                     </td>
+                    <td className="px-4 py-3">
+                      {ch.is_visible !== false ? (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-cyan-500/10 border border-cyan-500/30 text-cyan-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                          VISIBLE
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          HIDDEN
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setVisibilityModalTarget(ch)}
+                          className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors"
+                          title={ch.is_visible !== false ? 'Hide Challenge' : 'Unhide Challenge'}
+                        >
+                          {ch.is_visible !== false ? (
+                            <Eye className="w-3.5 h-3.5 text-cyan-400" />
+                          ) : (
+                            <EyeOff className="w-3.5 h-3.5 text-amber-400" />
+                          )}
+                        </button>
                         <button
                           onClick={() => handleOpenEdit(ch)}
                           className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors"
@@ -878,6 +931,75 @@ export const AdminChallengesPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Visibility Toggle Confirmation Modal */}
+      {visibilityModalTarget && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#090e1c] border border-slate-700 rounded-2xl shadow-2xl p-6 font-mono text-xs space-y-4">
+            <div className="flex items-center gap-3 text-cyan-400">
+              <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30">
+                {visibilityModalTarget.is_visible !== false ? (
+                  <EyeOff className="w-6 h-6 text-amber-400" />
+                ) : (
+                  <Eye className="w-6 h-6 text-cyan-400" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white uppercase tracking-wider">
+                  {visibilityModalTarget.is_visible !== false ? 'HIDE CHALLENGE?' : 'MAKE CHALLENGE VISIBLE?'}
+                </h3>
+                <p className="text-[10px] text-slate-400 uppercase">
+                  {visibilityModalTarget.name}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-slate-300">
+              {visibilityModalTarget.is_visible !== false ? (
+                <p className="leading-relaxed">
+                  This challenge will no longer be accessible to participants.
+                </p>
+              ) : (
+                <p className="leading-relaxed">
+                  This challenge will become accessible to participants when the competition is active.
+                </p>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setVisibilityModalTarget(null)}
+                disabled={togglingVisibility}
+                className="px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white transition-colors"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmToggleVisibility}
+                disabled={togglingVisibility}
+                className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-lg font-bold disabled:opacity-50 transition-colors shadow-md ${
+                  visibilityModalTarget.is_visible !== false
+                    ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/20'
+                    : 'bg-cyan-400 hover:bg-cyan-300 text-slate-950 shadow-cyan-400/20'
+                }`}
+              >
+                {togglingVisibility ? (
+                  <>
+                    <Terminal className="w-3.5 h-3.5 animate-spin" />
+                    <span>UPDATING VISIBILITY...</span>
+                  </>
+                ) : visibilityModalTarget.is_visible !== false ? (
+                  'HIDE CHALLENGE'
+                ) : (
+                  'UNHIDE CHALLENGE'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

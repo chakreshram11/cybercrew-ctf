@@ -11,6 +11,7 @@ import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ChallengesService } from './challenges.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { UpdateChallengeDto } from './dto/update-challenge.dto';
+import { UpdateChallengeVisibilityDto } from './dto/update-challenge-visibility.dto';
 import { DuplicateChallengeDto } from './dto/duplicate-challenge.dto';
 import { Public } from '../../common/decorators/public.decorator';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -66,6 +67,17 @@ export class ChallengesController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.challengesService.updateChallenge(id, dto, user);
+  }
+
+  @Patch('admin/challenges/:id/visibility')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'CHALLENGE_AUTHOR')
+  @ApiOperation({ summary: 'Toggle challenge visibility for participants' })
+  async updateChallengeVisibility(
+    @Param('id') id: string,
+    @Body() dto: UpdateChallengeVisibilityDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.challengesService.updateChallengeVisibility(id, dto, user);
   }
 
   @Post('admin/challenges/:id/duplicate')

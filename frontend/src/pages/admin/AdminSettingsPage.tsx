@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../lib/api';
 import { CompetitionSettings } from '../../types';
-import { Settings, Save, CheckCircle2, AlertCircle, Terminal, Shield } from 'lucide-react';
+import { Settings, Save, CheckCircle2, AlertCircle, Terminal, Shield, RotateCcw, AlertTriangle } from 'lucide-react';
 import { parseIsoToIstDateAndTime, combineIstDateAndTimeToIso } from '../../lib/utils';
 
 export const AdminSettingsPage: React.FC = () => {
+  const queryClient = useQueryClient();
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   // IST Date & Time field state
   const [startDate, setStartDate] = useState('');
@@ -139,6 +142,30 @@ export const AdminSettingsPage: React.FC = () => {
       setStatusMsg({ type: 'error', text: 'Network connection failure while saving settings.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleResetCompetition = async () => {
+    setResetting(true);
+    setStatusMsg(null);
+    try {
+      const res = await api.post('/admin/competition/reset');
+      if (res.success) {
+        setStatusMsg({ type: 'success', text: 'Competition reset successfully.' });
+        queryClient.invalidateQueries({ queryKey: ['scoreboard'] });
+        queryClient.invalidateQueries({ queryKey: ['team-progress'] });
+        queryClient.invalidateQueries({ queryKey: ['admin-stats'] });
+        queryClient.invalidateQueries({ queryKey: ['challenges'] });
+        queryClient.invalidateQueries({ queryKey: ['admin-challenges'] });
+        queryClient.invalidateQueries({ queryKey: ['categories'] });
+      } else {
+        setStatusMsg({ type: 'error', text: res.error?.message || 'Failed to reset competition.' });
+      }
+    } catch {
+      setStatusMsg({ type: 'error', text: 'Network connection failure while resetting competition.' });
+    } finally {
+      setResetting(false);
+      setShowResetModal(false);
     }
   };
 
@@ -410,6 +437,81 @@ export const AdminSettingsPage: React.FC = () => {
           </button>
         </div>
       </form>
+
+      {/* Danger Zone: Competition Reset */}
+      <div className="p-6 rounded-xl bg-rose-950/20 border border-rose-500/30 space-y-4 font-mono text-xs">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-bold text-rose-400 uppercase tracking-wider flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-rose-400" />
+              DESTRUCTIVE ADMINISTRATIVE CONTROLS
+            </h3>
+            <p className="text-slate-400 text-[11px] mt-1">
+              Completely clear all competition scoring, team solves, first bloods, submission history, and hint purchases to return to zero state.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowResetModal(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold transition-colors shadow-lg shadow-rose-600/20"
+          >
+            <RotateCcw className="w-4 h-4" />
+            RESET COMPETITION
+          </button>
+        </div>
+      </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#090e1c] border border-rose-500/40 rounded-2xl shadow-2xl p-6 font-mono text-xs space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white uppercase tracking-wider">RESET COMPETITION</h3>
+                <p className="text-[10px] text-rose-400 uppercase">Irreversible Administrative Action</p>
+              </div>
+            </div>
+
+            <div className="space-y-2 text-slate-300">
+              <p className="font-bold text-white text-sm">Are you sure you want to reset the competition?</p>
+              <p className="leading-relaxed">
+                This will reset all team scores, solves, first bloods, challenge progress, and related competition scoring data to zero.
+              </p>
+              <p className="font-bold text-rose-400">This action cannot be undone.</p>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowResetModal(false)}
+                disabled={resetting}
+                className="px-4 py-2 rounded-lg bg-slate-900 border border-slate-700 text-slate-300 hover:text-white transition-colors"
+              >
+                CANCEL
+              </button>
+              <button
+                type="button"
+                onClick={handleResetCompetition}
+                disabled={resetting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold disabled:opacity-50 transition-colors shadow-md shadow-rose-600/20"
+              >
+                {resetting ? (
+                  <>
+                    <Terminal className="w-3.5 h-3.5 animate-spin" />
+                    <span>RESETTING COMPETITION...</span>
+                  </>
+                ) : (
+                  'RESET COMPETITION'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

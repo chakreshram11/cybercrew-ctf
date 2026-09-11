@@ -30,6 +30,23 @@ export class HintsService {
 
     const client = this.supabaseService.getClient();
 
+    const isAdmin =
+      currentUser?.role === 'ADMIN' ||
+      currentUser?.role === 'SUPER_ADMIN' ||
+      currentUser?.role === 'CHALLENGE_AUTHOR' ||
+      currentUser?.role === 'MODERATOR';
+
+    const { data: challenge } = await client
+      .from('challenges')
+      .select('id, is_published, is_active, is_visible')
+      .eq('id', challengeId)
+      .maybeSingle();
+
+    const isHidden = challenge.is_visible === false;
+    if (!challenge || ((!challenge.is_published || !challenge.is_active || isHidden) && !isAdmin)) {
+      throw new NotFoundException('Challenge scenario is not currently available.');
+    }
+
     const { data: hints, error } = await client
       .from('challenge_hints')
       .select('id, challenge_id, title, cost, display_order, is_active')
@@ -121,11 +138,12 @@ export class HintsService {
     // 3. Verify challenge availability
     const { data: challenge } = await client
       .from('challenges')
-      .select('id, name, is_published, is_active')
+      .select('id, name, is_published, is_active, is_visible')
       .eq('id', challengeId)
       .maybeSingle();
 
-    if (!challenge || (!challenge.is_published || !challenge.is_active) && !isAdmin) {
+    const isHidden = challenge.is_visible === false;
+    if (!challenge || ((!challenge.is_published || !challenge.is_active || isHidden) && !isAdmin)) {
       throw new NotFoundException('Challenge scenario is not currently available.');
     }
 

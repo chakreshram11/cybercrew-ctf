@@ -144,6 +144,7 @@ export interface Challenge {
   status: ChallengeStatus;
   is_published: boolean;
   is_active: boolean;
+  is_visible?: boolean;
   max_attempts: number;
   submission_cooldown_seconds: number;
   scheduled_start?: string | null;

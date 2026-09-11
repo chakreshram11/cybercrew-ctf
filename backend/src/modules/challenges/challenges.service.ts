@@ -11,6 +11,7 @@ import { ScoringService } from '../scoring/scoring.service';
 import { CompetitionAccessService } from '../../common/services/competition-access.service';
 import { CreateChallengeDto } from './dto/create-challenge.dto';
 import { UpdateChallengeDto } from './dto/update-challenge.dto';
+import { UpdateChallengeVisibilityDto } from './dto/update-challenge-visibility.dto';
 import { DuplicateChallengeDto } from './dto/duplicate-challenge.dto';
 import { AuthUser } from '../../common/decorators/current-user.decorator';
 
@@ -57,6 +58,7 @@ export class ChallengesService {
         first_blood_bonus,
         solves_count,
         container_enabled,
+        is_visible,
         created_at,
         category:categories(id, name, slug),
         files:challenge_files(id, file_name, file_size, file_path, mime_type),
@@ -64,6 +66,7 @@ export class ChallengesService {
       `)
       .eq('is_published', true)
       .eq('is_active', true)
+      .eq('is_visible', true)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -133,6 +136,7 @@ export class ChallengesService {
         first_blood_bonus,
         solves_count,
         container_enabled,
+        is_visible,
         created_at,
         category:categories(id, name, slug),
         files:challenge_files(id, file_name, file_size, file_path, mime_type),
@@ -142,6 +146,7 @@ export class ChallengesService {
       .eq('slug', slug)
       .eq('is_published', true)
       .eq('is_active', true)
+      .eq('is_visible', true)
       .maybeSingle();
 
     if (error || !challenge) {
@@ -244,6 +249,7 @@ export class ChallengesService {
         status,
         is_published,
         is_active,
+        is_visible,
         solves_count,
         created_at,
         category:categories(id, name, slug),
@@ -301,6 +307,7 @@ export class ChallengesService {
         status: dto.status || 'ACTIVE',
         is_published: dto.status === 'ACTIVE' || dto.status === 'PUBLISHED',
         is_active: dto.status !== 'DISABLED' && dto.status !== 'ARCHIVED',
+        is_visible: dto.is_visible ?? true,
       })
       .select()
       .single();
@@ -408,6 +415,10 @@ export class ChallengesService {
       updatePayload.status = dto.status;
       updatePayload.is_published = dto.status === 'ACTIVE' || dto.status === 'PUBLISHED';
       updatePayload.is_active = dto.status !== 'DISABLED' && dto.status !== 'ARCHIVED';
+    }
+
+    if (dto.is_visible !== undefined) {
+      updatePayload.is_visible = dto.is_visible;
     }
 
     const { data: updated, error } = await client
@@ -585,5 +596,53 @@ export class ChallengesService {
     });
 
     return { success: true, message: 'Challenge removed.' };
+  }
+
+  /**
+   * Toggles participant visibility for a challenge scenario.
+   */
+  async updateChallengeVisibility(
+    id: string,
+    dto: UpdateChallengeVisibilityDto,
+    actor: AuthUser,
+  ) {
+    const client = this.supabaseService.getClient();
+
+    const { data: existing, error: findError } = await client
+      .from('challenges')
+      .select('id, name, is_visible')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (findError || !existing) {
+      throw new NotFoundException('Challenge scenario not found.');
+    }
+
+    const { data: updated, error } = await client
+      .from('challenges')
+      .update({
+        is_visible: dto.is_visible,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error || !updated) {
+      throw new InternalServerErrorException('Failed to update challenge visibility.');
+    }
+
+    // Write audit log
+    const auditAction = dto.is_visible ? 'CHALLENGE_UNHIDDEN' : 'CHALLENGE_HIDDEN';
+    await client.from('audit_logs').insert({
+      actor_id: actor.id,
+      action: auditAction,
+      resource_type: 'CHALLENGE',
+      resource_id: id,
+      metadata: { challenge_name: updated.name, is_visible: dto.is_visible },
+    });
+
+    this.logger.log(`Challenge visibility updated [${updated.name}]: is_visible=${dto.is_visible} by [${actor.username}]`);
+    return updated;
   }
 }

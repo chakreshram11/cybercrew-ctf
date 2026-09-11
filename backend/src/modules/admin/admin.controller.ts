@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
   Param,
   Body,
@@ -50,5 +51,11 @@ export class AdminController {
     @CurrentUser() user: AuthUser,
   ) {
     return this.adminService.updateCompetitionSettings(dto, user);
+  }
+
+  @Post('competition/reset')
+  @ApiOperation({ summary: 'Complete competition score and progress reset' })
+  async resetCompetition(@CurrentUser() user: AuthUser) {
+    return this.adminService.resetCompetition(user);
   }
 }
