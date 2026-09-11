@@ -95,11 +95,20 @@ export const AdminChallengesPage: React.FC = () => {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const { data: challengesData, isLoading, refetch } = useQuery({
+  const {
+    data: challengesData,
+    isLoading,
+    isError,
+    error: queryError,
+    refetch,
+  } = useQuery({
     queryKey: ['admin-challenges'],
     queryFn: async () => {
       const res = await api.get<Challenge[]>('/admin/challenges');
-      return res.success && res.data ? res.data : [];
+      if (!res.success) {
+        throw new Error(res.error?.message || 'Failed to load challenge inventory.');
+      }
+      return res.data || [];
     },
   });
 
@@ -489,6 +498,19 @@ export const AdminChallengesPage: React.FC = () => {
                   <td colSpan={8} className="px-4 py-12 text-center text-cyan-400">
                     <Terminal className="w-4 h-4 animate-spin inline mr-2" />
                     LOADING CHALLENGE INVENTORY...
+                  </td>
+                </tr>
+              ) : isError ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-rose-400">
+                    <AlertCircle className="w-5 h-5 inline mr-2" />
+                    <span>FAILED TO QUERY CHALLENGE INVENTORY: {(queryError as any)?.message || 'Server error'}</span>
+                    <button
+                      onClick={() => refetch()}
+                      className="ml-4 px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition-colors"
+                    >
+                      RETRY QUERY
+                    </button>
                   </td>
                 </tr>
               ) : filteredChallenges.length === 0 ? (

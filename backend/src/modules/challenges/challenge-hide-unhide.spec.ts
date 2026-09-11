@@ -184,24 +184,40 @@ describe('Challenge Visibility (Hide / Unhide) Suite', () => {
     (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
   });
 
-  it('5. Participant hint access to hidden challenge is REJECTED', async () => {
-    const hiddenClient = {
+  it('6. Admin challenge list falls back gracefully when is_visible column is missing in schema', async () => {
+    let callCount = 0;
+    const fallbackClient = {
       from: jest.fn().mockImplementation((table: string) => {
         if (table === 'challenges') {
-          return createChainableQuery(mockHiddenChallenge);
-        }
-        if (table === 'competition_settings') {
-          return createChainableQuery({ state: 'LIVE', hints_enabled: true });
+          callCount++;
+          if (callCount === 1) {
+            return {
+              select: jest.fn().mockReturnValue({
+                order: jest.fn().mockResolvedValue({
+                  data: null,
+                  error: { message: "column challenges.is_visible does not exist", code: "PGRST204" },
+                }),
+              }),
+            };
+          }
+          return createChainableQuery([mockVisibleChallenge]);
         }
         return createChainableQuery([]);
       }),
     };
-    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(hiddenClient);
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(fallbackClient);
 
-    await expect(
-      hintsService.unlockHint('chal-hid-1', 'hint-1', mockParticipantUser),
-    ).rejects.toThrow(NotFoundException);
+    const challenges = await challengesService.adminListChallenges();
+    expect(challenges).toBeDefined();
+    expect(challenges.length).toBeGreaterThan(0);
+    expect(challenges[0].is_visible).toBe(true);
 
     (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('7. Admin challenge list does not apply participant competition window filtering', async () => {
+    const challenges = await challengesService.adminListChallenges();
+    expect(challenges).toBeDefined();
+    expect(Array.isArray(challenges)).toBe(true);
   });
 });

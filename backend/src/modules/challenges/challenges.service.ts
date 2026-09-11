@@ -42,7 +42,10 @@ export class ChallengesService {
 
     const client = this.supabaseService.getClient();
 
-    const { data: challenges, error } = await client
+    let challenges: any[] | null = null;
+    let error: any = null;
+
+    const initialRes = await client
       .from('challenges')
       .select(`
         id,
@@ -68,6 +71,39 @@ export class ChallengesService {
       .eq('is_active', true)
       .eq('is_visible', true)
       .order('created_at', { ascending: false });
+
+    challenges = initialRes.data;
+    error = initialRes.error;
+
+    if (error && (error.message?.includes('is_visible') || error.code === 'PGRST204')) {
+      const fallback = await client
+        .from('challenges')
+        .select(`
+          id,
+          category_id,
+          name,
+          slug,
+          description,
+          difficulty,
+          challenge_type,
+          base_points,
+          current_points,
+          minimum_points,
+          first_blood_bonus,
+          solves_count,
+          container_enabled,
+          created_at,
+          category:categories(id, name, slug),
+          files:challenge_files(id, file_name, file_size, file_path, mime_type),
+          target:challenge_targets(target_url, target_host, target_port, protocol)
+        `)
+        .eq('is_published', true)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      challenges = fallback.data;
+      error = fallback.error;
+    }
 
     if (error) {
       throw new InternalServerErrorException('Failed to retrieve challenges.');
@@ -228,11 +264,16 @@ export class ChallengesService {
 
   /**
    * Administrative challenge listing across all lifecycle states.
+   * RESILIENT: Never applies participant filters. Handles missing is_visible column gracefully.
    */
   async adminListChallenges() {
     const client = this.supabaseService.getClient();
 
-    const { data: challenges, error } = await client
+    let challenges: any[] | null = null;
+    let error: any = null;
+
+    // 1. Try querying with is_visible column included
+    const initialRes = await client
       .from('challenges')
       .select(`
         id,
@@ -257,11 +298,52 @@ export class ChallengesService {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      throw new InternalServerErrorException('Failed to query challenge inventory.');
+    challenges = initialRes.data;
+    error = initialRes.error;
+
+    // 2. Fallback: If is_visible column does not exist on database yet, retry without is_visible
+    if (error && (error.message?.includes('is_visible') || error.code === 'PGRST204')) {
+      this.logger.warn(`is_visible column missing in Supabase schema, executing fallback query: ${error.message}`);
+      const fallbackRes = await client
+        .from('challenges')
+        .select(`
+          id,
+          category_id,
+          name,
+          slug,
+          description,
+          difficulty,
+          challenge_type,
+          base_points,
+          current_points,
+          minimum_points,
+          first_blood_bonus,
+          status,
+          is_published,
+          is_active,
+          solves_count,
+          created_at,
+          category:categories(id, name, slug),
+          target:challenge_targets(target_url, target_host, target_port, protocol)
+        `)
+        .order('created_at', { ascending: false });
+
+      challenges = fallbackRes.data;
+      error = fallbackRes.error;
     }
 
-    return challenges || [];
+    if (error) {
+      this.logger.error(`[adminListChallenges] Error querying challenges: ${error.message}`);
+      throw new InternalServerErrorException(`Failed to query challenge inventory: ${error.message}`);
+    }
+
+    const count = challenges?.length || 0;
+    this.logger.log(`[AdminChallenges] fetched challenges count=${count}`);
+
+    return (challenges || []).map((ch: any) => ({
+      ...ch,
+      is_visible: ch.is_visible !== false,
+    }));
   }
 
   /**
