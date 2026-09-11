@@ -93,7 +93,7 @@ export class AdminService {
       .maybeSingle();
 
     if (chalError || !challenge) {
-      throw new NotFoundException('Challenge scenario not found.');
+      throw new NotFoundException('Challenge not found.');
     }
 
     // Submissions breakdown

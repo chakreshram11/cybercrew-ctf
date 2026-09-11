@@ -186,7 +186,7 @@ export class ChallengesService {
       .maybeSingle();
 
     if (error || !challenge) {
-      throw new NotFoundException('Challenge scenario not found.');
+      throw new NotFoundException('Challenge not found.');
     }
 
     // Check solve status
@@ -450,7 +450,7 @@ export class ChallengesService {
       .maybeSingle();
 
     if (findError || !existing) {
-      throw new NotFoundException('Challenge scenario not found.');
+      throw new NotFoundException('Challenge not found.');
     }
 
     const updatePayload: any = {
@@ -580,7 +580,7 @@ export class ChallengesService {
       .single();
 
     if (sourceError || !source) {
-      throw new NotFoundException('Source challenge scenario not found.');
+      throw new NotFoundException('Source challenge not found.');
     }
 
     const clonedName = dto.name || `${source.name} (Copy)`;

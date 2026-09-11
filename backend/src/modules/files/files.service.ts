@@ -232,7 +232,7 @@ export class FilesService {
       .maybeSingle();
 
     if (!challenge) {
-      throw new NotFoundException('Challenge scenario not found.');
+      throw new NotFoundException('Challenge not found.');
     }
 
     // Check existing count

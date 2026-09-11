@@ -84,7 +84,7 @@ export class SubmissionsService {
       .maybeSingle();
 
     if (chalError || !challenge) {
-      throw new NotFoundException('Challenge scenario not found.');
+      throw new NotFoundException('Challenge not found.');
     }
 
     const isHidden = challenge.is_visible === false;

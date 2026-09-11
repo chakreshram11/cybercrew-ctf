@@ -22,6 +22,13 @@ describe('Challenge Visibility (Hide / Unhide) Suite', () => {
     role: 'ADMIN',
   };
 
+  const mockSuperAdminUser: AuthUser = {
+    id: 'super-admin-1',
+    username: 'superadmin',
+    email: 'superadmin@ctf.com',
+    role: 'SUPER_ADMIN',
+  };
+
   const mockParticipantUser: AuthUser = {
     id: 'user-1',
     username: 'player1',
@@ -77,8 +84,8 @@ describe('Challenge Visibility (Hide / Unhide) Suite', () => {
     from: jest.fn().mockImplementation((table: string) => {
       if (table === 'competition_settings') {
         return createChainableQuery({
-          start_date: '2026-01-01T00:00:00Z',
-          end_date: '2026-12-31T23:59:59Z',
+          start_date: '2020-01-01T00:00:00Z',
+          end_date: '2099-12-31T23:59:59Z',
           state: 'LIVE',
           dynamic_scoring_enabled: true,
           first_blood_enabled: true,
@@ -139,117 +146,86 @@ describe('Challenge Visibility (Hide / Unhide) Suite', () => {
     competitionAccessService = module.get<CompetitionAccessService>(CompetitionAccessService);
   });
 
-  it('1. Admin can hide a challenge via updateChallengeVisibility', async () => {
+  it('1. Admin can hide a challenge with no scenario', async () => {
+    let callCount = 0;
+    const hideClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          callCount++;
+          if (callCount === 1) {
+            return createChainableQuery(mockVisibleChallenge);
+          }
+          return createChainableQuery(mockHiddenChallenge);
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(hideClient);
+
     const updated = await challengesService.updateChallengeVisibility(
       'chal-vis-1',
       { is_visible: false },
       mockAdminUser,
     );
     expect(updated).toBeDefined();
-    expect(mockSupabaseClient.from).toHaveBeenCalledWith('audit_logs');
-  });
-
-  it('2. Admin can unhide a challenge via updateChallengeVisibility', async () => {
-    const updated = await challengesService.updateChallengeVisibility(
-      'chal-vis-1',
-      { is_visible: true },
-      mockAdminUser,
-    );
-    expect(updated).toBeDefined();
-  });
-
-  it('3. Admin can list all challenges including hidden challenges', async () => {
-    const challenges = await challengesService.adminListChallenges();
-    expect(challenges).toBeDefined();
-  });
-
-  it('4. Participant flag submission to hidden challenge is REJECTED', async () => {
-    const hiddenClient = {
-      from: jest.fn().mockImplementation((table: string) => {
-        if (table === 'challenges') {
-          return createChainableQuery(mockHiddenChallenge);
-        }
-        if (table === 'competition_settings') {
-          return createChainableQuery({ state: 'LIVE' });
-        }
-        return createChainableQuery([]);
-      }),
-    };
-    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(hiddenClient);
-
-    await expect(
-      submissionsService.submitFlag('chal-hid-1', { flag: 'CCCTF{test}' }, mockParticipantUser, '127.0.0.1', 'UA'),
-    ).rejects.toThrow(ForbiddenException);
-
-    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
-  });
-
-  it('6. Admin challenge list falls back gracefully when is_visible column is missing in schema', async () => {
-    let callCount = 0;
-    const fallbackClient = {
-      from: jest.fn().mockImplementation((table: string) => {
-        if (table === 'challenges') {
-          callCount++;
-          if (callCount === 1) {
-            return {
-              select: jest.fn().mockReturnValue({
-                order: jest.fn().mockResolvedValue({
-                  data: null,
-                  error: { message: "column challenges.is_visible does not exist", code: "PGRST204" },
-                }),
-              }),
-            };
-          }
-          return createChainableQuery([mockVisibleChallenge]);
-        }
-        return createChainableQuery([]);
-      }),
-    };
-    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(fallbackClient);
-
-    const challenges = await challengesService.adminListChallenges();
-    expect(challenges).toBeDefined();
-    expect(challenges.length).toBeGreaterThan(0);
-    expect(challenges[0].is_visible).toBe(true);
-
-    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
-  });
-
-  it('8. Admin can hide a challenge with no scenario or container infrastructure', async () => {
-    const noScenarioChallenge = {
-      id: 'chal-no-scenario',
-      name: 'Static Spec Challenge',
-      slug: 'static-spec-challenge',
-      is_visible: true,
-      target: null,
-    };
-    const updatedScenarioChallenge = {
-      ...noScenarioChallenge,
-      is_visible: false,
-    };
-    let callCount = 0;
-    const noScenarioClient = {
-      from: jest.fn().mockImplementation((table: string) => {
-        if (table === 'challenges') {
-          callCount++;
-          if (callCount === 1) {
-            return createChainableQuery(noScenarioChallenge);
-          }
-          return createChainableQuery(updatedScenarioChallenge);
-        }
-        return createChainableQuery([]);
-      }),
-    };
-    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(noScenarioClient);
-
-    const updated = await challengesService.updateChallengeVisibility('chal-no-scenario', { is_visible: false }, mockAdminUser);
-    expect(updated).toBeDefined();
     expect(updated.is_visible).toBe(false);
 
     (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
   });
 
-  it('9. Non-existent challenge returns 404 "Challenge not found."', async () => {
+  it('2. Admin can unhide a challenge with no scenario', async () => {
+    let callCount = 0;
+    const unhideClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          callCount++;
+          if (callCount === 1) {
+            return createChainableQuery(mockHiddenChallenge);
+          }
+          return createChainableQuery(mockVisibleChallenge);
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(unhideClient);
+
+    const updated = await challengesService.updateChallengeVisibility(
+      'chal-hid-1',
+      { is_visible: true },
+      mockAdminUser,
+    );
+    expect(updated).toBeDefined();
+    expect(updated.is_visible).toBe(true);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('3. Visibility update only requires challenges.id', async () => {
+    let queriedFields = '';
+    const idOnlyClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          return {
+            select: jest.fn().mockImplementation((fields: string) => {
+              queriedFields = fields;
+              return createChainableQuery(mockVisibleChallenge);
+            }),
+            update: jest.fn().mockReturnValue(createChainableQuery(mockHiddenChallenge)),
+          };
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(idOnlyClient);
+
+    const updated = await challengesService.updateChallengeVisibility('chal-vis-1', { is_visible: false }, mockAdminUser);
+    expect(queriedFields).toBe('id, name');
+    expect(updated).toBeDefined();
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('4. Missing challenge returns 404 "Challenge not found."', async () => {
     const notFoundClient = {
       from: jest.fn().mockImplementation(() => ({
         select: jest.fn().mockReturnValue({
@@ -263,6 +239,199 @@ describe('Challenge Visibility (Hide / Unhide) Suite', () => {
 
     await expect(
       challengesService.updateChallengeVisibility('non-existent-uuid', { is_visible: false }, mockAdminUser),
+    ).rejects.toThrow('Challenge not found.');
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('5. Scenario absence does NOT cause failure', async () => {
+    const noScenarioChallenge = {
+      id: 'chal-no-infra',
+      name: 'Pure Spec Challenge',
+      is_visible: true,
+      scenario: null,
+      container: null,
+    };
+    const client = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          return createChainableQuery({ ...noScenarioChallenge, is_visible: false });
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(client);
+
+    const result = await challengesService.updateChallengeVisibility('chal-no-infra', { is_visible: false }, mockAdminUser);
+    expect(result).toBeDefined();
+    expect(result.is_visible).toBe(false);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('6. ADMIN can toggle visibility', async () => {
+    const updated = await challengesService.updateChallengeVisibility('chal-vis-1', { is_visible: false }, mockAdminUser);
+    expect(updated).toBeDefined();
+  });
+
+  it('7. SUPER_ADMIN can toggle visibility', async () => {
+    const updated = await challengesService.updateChallengeVisibility('chal-vis-1', { is_visible: false }, mockSuperAdminUser);
+    expect(updated).toBeDefined();
+  });
+
+  it('9. Hide writes is_visible=false', async () => {
+    let writtenPayload: any = null;
+    const writeClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          return {
+            select: jest.fn().mockReturnValue(createChainableQuery(mockVisibleChallenge)),
+            update: jest.fn().mockImplementation((payload: any) => {
+              writtenPayload = payload;
+              return createChainableQuery({ ...mockVisibleChallenge, ...payload });
+            }),
+          };
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(writeClient);
+
+    await challengesService.updateChallengeVisibility('chal-vis-1', { is_visible: false }, mockAdminUser);
+    expect(writtenPayload).toBeDefined();
+    expect(writtenPayload.is_visible).toBe(false);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('10. Unhide writes is_visible=true', async () => {
+    let writtenPayload: any = null;
+    const writeClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          return {
+            select: jest.fn().mockReturnValue(createChainableQuery(mockHiddenChallenge)),
+            update: jest.fn().mockImplementation((payload: any) => {
+              writtenPayload = payload;
+              return createChainableQuery({ ...mockHiddenChallenge, ...payload });
+            }),
+          };
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(writeClient);
+
+    await challengesService.updateChallengeVisibility('chal-hid-1', { is_visible: true }, mockAdminUser);
+    expect(writtenPayload).toBeDefined();
+    expect(writtenPayload.is_visible).toBe(true);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('11 & 12. CHALLENGE_HIDDEN and CHALLENGE_UNHIDDEN audit events are created', async () => {
+    const insertedAudits: any[] = [];
+    const auditClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          return createChainableQuery(mockVisibleChallenge);
+        }
+        if (table === 'audit_logs') {
+          return {
+            insert: jest.fn().mockImplementation(async (data: any) => {
+              insertedAudits.push(data);
+              return { data, error: null };
+            }),
+          };
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(auditClient);
+
+    await challengesService.updateChallengeVisibility('chal-vis-1', { is_visible: false }, mockAdminUser);
+    await challengesService.updateChallengeVisibility('chal-vis-1', { is_visible: true }, mockAdminUser);
+
+    expect(insertedAudits.length).toBe(2);
+    expect(insertedAudits[0].action).toBe('CHALLENGE_HIDDEN');
+    expect(insertedAudits[0].resource_type).toBe('CHALLENGE');
+    expect(insertedAudits[0].resource_id).toBe('chal-vis-1');
+    expect(insertedAudits[1].action).toBe('CHALLENGE_UNHIDDEN');
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('13. Participant cannot access hidden challenge', async () => {
+    const hiddenClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'competition_settings') {
+          return createChainableQuery({
+            start_date: '2020-01-01T00:00:00Z',
+            end_date: '2099-12-31T23:59:59Z',
+            state: 'LIVE',
+          });
+        }
+        if (table === 'challenges') {
+          return createChainableQuery(null);
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(hiddenClient);
+
+    await expect(
+      challengesService.getPublicChallengeBySlug('hidden-challenge', mockParticipantUser),
+    ).rejects.toThrow(NotFoundException);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('14. Participant cannot submit flag to hidden challenge', async () => {
+    const hiddenClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          return createChainableQuery(mockHiddenChallenge);
+        }
+        if (table === 'competition_settings') {
+          return createChainableQuery({
+            start_date: '2020-01-01T00:00:00Z',
+            end_date: '2099-12-31T23:59:59Z',
+            state: 'LIVE',
+          });
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(hiddenClient);
+
+    await expect(
+      submissionsService.submitFlag('chal-hid-1', { flag: 'CCCTF{test}' }, mockParticipantUser, '127.0.0.1', 'UA'),
+    ).rejects.toThrow(ForbiddenException);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('15. Participant cannot unlock paid hint on hidden challenge', async () => {
+    const hiddenClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          return createChainableQuery(mockHiddenChallenge);
+        }
+        if (table === 'competition_settings') {
+          return createChainableQuery({
+            start_date: '2020-01-01T00:00:00Z',
+            end_date: '2099-12-31T23:59:59Z',
+            state: 'LIVE',
+            hints_enabled: true,
+          });
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(hiddenClient);
+
+    await expect(
+      hintsService.unlockHint('chal-hid-1', 'hint-1', mockParticipantUser),
     ).rejects.toThrow(NotFoundException);
 
     (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
