@@ -54,6 +54,7 @@ export const AdminChallengesPage: React.FC = () => {
 
   // Visibility toggle modal state
   const [visibilityModalTarget, setVisibilityModalTarget] = useState<Challenge | null>(null);
+  const [visibilityModalError, setVisibilityModalError] = useState<string | null>(null);
   const [togglingVisibility, setTogglingVisibility] = useState(false);
 
   // Form State for Create/Edit
@@ -422,6 +423,7 @@ export const AdminChallengesPage: React.FC = () => {
   const handleConfirmToggleVisibility = async () => {
     if (!visibilityModalTarget) return;
     setTogglingVisibility(true);
+    setVisibilityModalError(null);
     const newVisibility = !visibilityModalTarget.is_visible;
     try {
       const res = await api.patch(`/admin/challenges/${visibilityModalTarget.id}/visibility`, {
@@ -430,14 +432,14 @@ export const AdminChallengesPage: React.FC = () => {
       if (res.success) {
         refetch();
         invalidateAllQueries();
+        setVisibilityModalTarget(null);
       } else {
-        alert(res.error?.message || 'Failed to update challenge visibility.');
+        setVisibilityModalError(res.error?.message || 'Failed to update challenge visibility.');
       }
-    } catch {
-      alert('Network error while toggling visibility.');
+    } catch (err: any) {
+      setVisibilityModalError(err.message || 'Network error while toggling visibility.');
     } finally {
       setTogglingVisibility(false);
-      setVisibilityModalTarget(null);
     }
   };
 
@@ -562,7 +564,10 @@ export const AdminChallengesPage: React.FC = () => {
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => setVisibilityModalTarget(ch)}
+                          onClick={() => {
+                            setVisibilityModalTarget(ch);
+                            setVisibilityModalError(null);
+                          }}
                           className="p-1.5 rounded hover:bg-slate-800 text-slate-400 hover:text-cyan-400 transition-colors"
                           title={ch.is_visible !== false ? 'Hide Challenge' : 'Unhide Challenge'}
                         >
@@ -978,6 +983,13 @@ export const AdminChallengesPage: React.FC = () => {
                 </p>
               </div>
             </div>
+
+            {visibilityModalError && (
+              <div className="p-3 rounded bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{visibilityModalError}</span>
+              </div>
+            )}
 
             <div className="space-y-2 text-slate-300">
               {visibilityModalTarget.is_visible !== false ? (

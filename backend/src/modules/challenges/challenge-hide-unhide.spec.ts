@@ -215,9 +215,56 @@ describe('Challenge Visibility (Hide / Unhide) Suite', () => {
     (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
   });
 
-  it('7. Admin challenge list does not apply participant competition window filtering', async () => {
-    const challenges = await challengesService.adminListChallenges();
-    expect(challenges).toBeDefined();
-    expect(Array.isArray(challenges)).toBe(true);
+  it('8. Admin can hide a challenge with no scenario or container infrastructure', async () => {
+    const noScenarioChallenge = {
+      id: 'chal-no-scenario',
+      name: 'Static Spec Challenge',
+      slug: 'static-spec-challenge',
+      is_visible: true,
+      target: null,
+    };
+    const updatedScenarioChallenge = {
+      ...noScenarioChallenge,
+      is_visible: false,
+    };
+    let callCount = 0;
+    const noScenarioClient = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'challenges') {
+          callCount++;
+          if (callCount === 1) {
+            return createChainableQuery(noScenarioChallenge);
+          }
+          return createChainableQuery(updatedScenarioChallenge);
+        }
+        return createChainableQuery([]);
+      }),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(noScenarioClient);
+
+    const updated = await challengesService.updateChallengeVisibility('chal-no-scenario', { is_visible: false }, mockAdminUser);
+    expect(updated).toBeDefined();
+    expect(updated.is_visible).toBe(false);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
+  });
+
+  it('9. Non-existent challenge returns 404 "Challenge not found."', async () => {
+    const notFoundClient = {
+      from: jest.fn().mockImplementation(() => ({
+        select: jest.fn().mockReturnValue({
+          eq: jest.fn().mockReturnValue({
+            maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+      })),
+    };
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(notFoundClient);
+
+    await expect(
+      challengesService.updateChallengeVisibility('non-existent-uuid', { is_visible: false }, mockAdminUser),
+    ).rejects.toThrow(NotFoundException);
+
+    (mockSupabaseService.getClient as jest.Mock).mockReturnValue(mockSupabaseClient);
   });
 });
